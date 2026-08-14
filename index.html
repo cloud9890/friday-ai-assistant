@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>F.R.I.D.A.Y. // Stark Tactical AI Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="stark-theme">
+
+  <!-- Background Cyber HUD Grid Overlay -->
+  <div class="hud-overlay">
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="grid-background"></div>
+  </div>
+
+  <!-- Top Navigation & HUD Bar -->
+  <header class="hud-header">
+    <div class="header-left">
+      <div class="stark-logo">
+        <svg viewBox="0 0 100 24" width="100" height="24" class="stark-brand-icon">
+          <polygon points="5,2 25,2 20,22 0,22" fill="#00f0ff" opacity="0.9"/>
+          <text x="30" y="17" font-family="'Orbitron', sans-serif" font-weight="900" font-size="14" fill="#ffffff" letter-spacing="2">STARK</text>
+        </svg>
+        <span class="sub-brand">INDUSTRIES // OS v4.82</span>
+      </div>
+      <div class="hud-badge status-online" id="statusBadge">
+        <span class="status-dot"></span>
+        <span id="statusText">F.R.I.D.A.Y. ONLINE</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="hud-title-wrap">
+        <h1 class="hud-title">F.R.I.D.A.Y.</h1>
+        <span class="hud-subtitle">TACTICAL AI ASSISTANT SYSTEM</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="time-widget">
+        <span class="time-label">LOCAL STARK TIME</span>
+        <span class="time-val" id="clockDisplay">00:00:00</span>
+      </div>
+
+      <div class="header-controls">
+        <button id="btnToggleSound" class="icon-btn active" title="Toggle Sound FX">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        
+        <button id="btnToggleVoice" class="icon-btn active" title="Toggle Voice Output">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main HUD Layout Grid -->
+  <main class="hud-main-grid">
+    
+    <!-- LEFT PANEL: Telemetry & Environmental -->
+    <aside class="hud-panel left-panel">
+      
+      <!-- Mark LXXXV Suit Status -->
+      <section class="stark-card suit-card">
+        <div class="card-header">
+          <span class="card-icon">⚡</span>
+          <h2>MARK LXXXV TELEMETRY</h2>
+          <span class="card-tag">ONLINE</span>
+        </div>
+        <div class="card-body">
+          <div class="suit-visual-box">
+            <div class="suit-wireframe">
+              <div class="repulsor-node node-chest" title="Arc Reactor Core"></div>
+              <div class="repulsor-node node-left-hand" title="Left Hand Repulsor"></div>
+              <div class="repulsor-node node-right-hand" title="Right Hand Repulsor"></div>
+              <div class="armor-silhouette"></div>
+            </div>
+            <div class="suit-stat-readout">
+              <div class="stat-row">
+                <span class="stat-name">NANOTECH INTEGRITY</span>
+                <span class="stat-value cyan" id="suitIntegrity">100%</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill cyan" id="suitIntegrityBar" style="width: 100%;"></div></div>
+
+              <div class="stat-row">
+                <span class="stat-name">ARC CORE OUTPUT</span>
+                <span class="stat-value gold" id="suitCore">98.4 GW</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill gold" id="suitCoreBar" style="width: 98%;"></div></div>
+
+              <div class="stat-row">
+                <span class="stat-name">SHIELD DENSITY</span>
+                <span class="stat-value blue" id="suitShield">100%</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill blue" id="suitShieldBar" style="width: 100%;"></div></div>
+            </div>
+          </div>
+          <div class="suit-sub-metrics">
+            <div class="mini-stat">
+              <span class="lbl">THRUSTERS</span>
+              <span class="val" id="thrustersVal">NOMINAL</span>
+            </div>
+            <div class="mini-stat">
+              <span class="lbl">TARGET LOCK</span>
+              <span class="val green" id="targetLockVal">READY</span>
+            </div>
+            <div class="mini-stat">
+              <span class="lbl">REPULSORS</span>
+              <span class="val cyan" id="repulsorVal">CHARGED</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Environmental & Atmospheric Scanner -->
+      <section class="stark-card scanner-card">
+        <div class="card-header">
+          <span class="card-icon">🌐</span>
+          <h2>ATMOSPHERIC SCANNER</h2>
+          <span class="card-tag">LIVE</span>
+        </div>
+        <div class="card-body">
+          <div class="scanner-grid">
+            <div class="scan-item">
+              <span class="scan-label">LOCATION</span>
+              <span class="scan-val" id="scanLoc">MALIBU POINT</span>
+            </div>
+            <div class="scan-item">
+              <span class="scan-label">AMB. TEMP</span>
+              <span class="scan-val" id="scanTemp">22.4°C</span>
+            </div>
+            <div class="scan-item">
+              <span class="scan-label">ATM PRESSURE</span>
+              <span class="scan-val" id="scanPressure">1013.2 hPa</span>
+            </div>
+            <div class="scan-item">
+              <span class="scan-label">THREAT LEVEL</span>
+              <span class="scan-val green" id="scanThreat">DEFCON 5 (CLEAR)</span>
+            </div>
+          </div>
+
+          <div class="radar-box">
+            <div class="radar-circle">
+              <div class="radar-sweep"></div>
+              <div class="radar-blip blip-1"></div>
+              <div class="radar-blip blip-2"></div>
+              <div class="radar-crosshair"></div>
+            </div>
+            <div class="radar-info">
+              <span>PERIMETER CLEAR</span>
+              <span class="dim">0 DETECTED ANOMALIES</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- CENTER PANEL: Arc Reactor Visualizer & Core Chat Assistant -->
+    <section class="hud-panel center-panel">
+
+      <!-- Central Arc Reactor Canvas Core -->
+      <div class="arc-reactor-container">
+        <div class="orbital-ring ring-outer"></div>
+        <div class="orbital-ring ring-mid"></div>
+        <div class="orbital-ring ring-inner"></div>
+
+        <canvas id="arcCanvas" width="340" height="340"></canvas>
+
+        <div class="reactor-center-info">
+          <span class="reactor-title">F.R.I.D.A.Y.</span>
+          <span class="reactor-state" id="reactorState">LISTENING</span>
+        </div>
+      </div>
+
+      <!-- Voice Interaction HUD Alert Banner -->
+      <div class="voice-status-banner" id="voiceBanner">
+        <div class="voice-indicator-pulsar" id="voicePulsar"></div>
+        <span id="voiceBannerText">Say "Friday..." or press the mic button to issue voice commands</span>
+      </div>
+
+      <!-- Interactive Assistant Terminal & Logs -->
+      <div class="stark-card terminal-card">
+        <div class="card-header">
+          <span class="card-icon">💬</span>
+          <h2>TACTICAL LOG & COMMUNICATION STREAM</h2>
+          <span class="card-tag">ENCRYPTED</span>
+        </div>
+
+        <div class="card-body terminal-body" id="chatStream">
+          <div class="chat-msg msg-friday">
+            <div class="msg-author">F.R.I.D.A.Y.</div>
+            <div class="msg-content">Good day, Boss. All suit systems and neural telemetry are running at peak efficiency. How can I assist you today?</div>
+            <div class="msg-time">SYSTEM READY</div>
+          </div>
+        </div>
+
+        <!-- Audio Spectrum Canvas Overlay -->
+        <div class="spectrum-bar-wrap">
+          <canvas id="spectrumCanvas" width="600" height="30"></canvas>
+        </div>
+
+        <!-- User Command Input Dock -->
+        <div class="command-dock">
+          <button id="btnMic" class="mic-trigger-btn" title="Voice Input (Click or say 'Friday')">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </button>
+
+          <input type="text" id="cmdInput" class="cmd-input" placeholder="Initiate query or command... (e.g. 'Friday, suit status' or 'Friday, system scan')" autocomplete="off"/>
+
+          <button id="btnSend" class="send-btn">
+            <span>EXECUTE</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Quick Voice Command Pill Tags -->
+        <div class="quick-commands">
+          <button class="quick-chip" data-cmd="Friday, run full system diagnostics">Diagnostics</button>
+          <button class="quick-chip" data-cmd="Friday, suit status update">Suit Status</button>
+          <button class="quick-chip" data-cmd="Friday, scan environment">Environment Scan</button>
+          <button class="quick-chip" data-cmd="Friday, house party protocol">House Party Protocol</button>
+          <button class="quick-chip" data-cmd="Friday, calculate 15 percent of 4500">Calculator</button>
+          <button class="quick-chip" data-cmd="Friday, note down calibrate repulsor arrays">Add Note</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL: Systems Diagnostics & Directives -->
+    <aside class="hud-panel right-panel">
+
+      <!-- System Diagnostics -->
+      <section class="stark-card diag-card">
+        <div class="card-header">
+          <span class="card-icon">🖥️</span>
+          <h2>SYSTEM DIAGNOSTICS</h2>
+          <span class="card-tag">TELEMETRY</span>
+        </div>
+        <div class="card-body">
+          <div class="diag-meter-group">
+            <div class="diag-item">
+              <div class="diag-lbl">
+                <span>CPU QUANTUM CORES</span>
+                <span class="val" id="cpuVal">14%</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill cyan" id="cpuBar" style="width: 14%;"></div></div>
+            </div>
+
+            <div class="diag-item">
+              <div class="diag-lbl">
+                <span>NEURAL MEMORY ALLOC</span>
+                <span class="val" id="memVal">42%</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill blue" id="memBar" style="width: 42%;"></div></div>
+            </div>
+
+            <div class="diag-item">
+              <div class="diag-lbl">
+                <span>QUANTUM PING LATENCY</span>
+                <span class="val green" id="pingVal">4 ms</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill green" id="pingBar" style="width: 10%;"></div></div>
+            </div>
+
+            <div class="diag-item">
+              <div class="diag-lbl">
+                <span>STARK SATELLITE LINK</span>
+                <span class="val gold" id="satVal">VERITAS-9 ACTIVE</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill gold" id="satBar" style="width: 95%;"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Directives & Task Log -->
+      <section class="stark-card directives-card">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <h2>DIRECTIVES & TASK LOG</h2>
+          <span class="card-tag" id="directiveCount">3 ACTIVE</span>
+        </div>
+        <div class="card-body">
+          <div class="directive-input-wrap">
+            <input type="text" id="directiveInput" placeholder="Add new directive or say 'Friday, note...'"/>
+            <button id="btnAddDirective">+</button>
+          </div>
+          
+          <ul class="directive-list" id="directiveList">
+            <!-- Directives dynamically injected here -->
+          </ul>
+        </div>
+      </section>
+
+      <!-- Stark Protocols Control Deck -->
+      <section class="stark-card protocols-card">
+        <div class="card-header">
+          <span class="card-icon">⚠️</span>
+          <h2>TACTICAL PROTOCOLS</h2>
+          <span class="card-tag red">COMMAND</span>
+        </div>
+        <div class="card-body">
+          <div class="protocol-grid">
+            <button class="protocol-btn btn-house-party" id="btnHouseParty">
+              <span class="p-code">PROTOCOL 42</span>
+              <span class="p-name">HOUSE PARTY</span>
+            </button>
+            <button class="protocol-btn btn-override" id="btnOverride">
+              <span class="p-code">OVERRIDE</span>
+              <span class="p-name">MANUAL CONTROL</span>
+            </button>
+            <button class="protocol-btn" id="btnOverdrive">
+              <span class="p-code">BOOST</span>
+              <span class="p-name">REPULSOR OVERDRIVE</span>
+            </button>
+            <button class="protocol-btn" id="btnScanAll">
+              <span class="p-code">SCAN</span>
+              <span class="p-name">FULL DIAGNOSTIC</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+  </main>
+
+  <!-- Footer HUD Bar -->
+  <footer class="hud-footer">
+    <div class="footer-item">STARK AI ARCHITECTURE // F.R.I.D.A.Y. CORE</div>
+    <div class="footer-item ticker-wrap">
+      <span class="ticker-label">LIVE TICKER:</span>
+      <span class="ticker-text" id="tickerText">ALL STARK SUIT TELEMETRY OPTIMAL // SATELLITE RELAY CONNECTED // STARK AI ACTIVE</span>
+    </div>
+    <div class="footer-item">STATUS: 200 OK</div>
+  </footer>
+
+  <!-- Protocol Overlay Effect Container -->
+  <div class="protocol-overlay" id="protocolOverlay">
+    <div class="protocol-content">
+      <div class="protocol-alert-symbol">⚠️</div>
+      <h1 id="protocolOverlayTitle">HOUSE PARTY PROTOCOL ACTIVATED</h1>
+      <p id="protocolOverlayDesc">Deploying all autonomous Stark Iron Man Mark armors to location.</p>
+      <div class="protocol-spinner"></div>
+      <button class="send-btn red-btn" id="btnDismissProtocol">DEACTIVATE PROTOCOL</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
