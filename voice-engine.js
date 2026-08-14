@@ -202,16 +202,11 @@ export class VoiceEngine {
       try { this.recognition.stop(); } catch(e) {}
     }
 
-    this.stopSpeaking();
-
-    // 1. Always use fixed ElevenLabs AI Voice (Bella)
-    let spoken = false;
+    // 1. Exclusively use ElevenLabs AI Voice (Bella - EXAVITQu4vr4xnSDxMaL)
     if (this.elevenLabsApiKey && this.elevenLabsVoiceId) {
-      spoken = await this.speakElevenLabs(text);
-    }
-
-    // 2. Fallback to locked fixed Web Speech Voice if ElevenLabs is unavailable
-    if (!spoken) {
+      await this.speakElevenLabs(text);
+    } else {
+      console.warn("ElevenLabs API Key not configured in .env. Falling back only if necessary.");
       this.speakWebSpeech(text);
     }
 

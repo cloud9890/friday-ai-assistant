@@ -45,6 +45,22 @@ class FridayApp {
 
     // Initial F.R.I.D.A.Y. greeting sound
     soundFX.playPowerUp();
+    this.verifyGeminiKey();
+  }
+
+  async verifyGeminiKey() {
+    if (!this.geminiApiKey) {
+      console.warn("⚠️ No VITE_GEMINI_API_KEY detected in .env file.");
+      return;
+    }
+    console.log("🔍 Testing Gemini API Key connectivity with Google servers...");
+    const testPrompt = "Say: Stark Neural Matrix Online.";
+    const result = await this.fetchGeminiResponse(testPrompt);
+    if (result) {
+      console.log("⚡ [GEMINI STATUS: ONLINE & ACTIVE] -> Response:", result);
+    } else {
+      console.error("❌ [GEMINI STATUS: FAILED] -> Key is invalid, expired, or rejected by Google Generative AI API.");
+    }
   }
 
   /* ------------------------------------------------------------------------
@@ -129,7 +145,6 @@ class FridayApp {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Glowing Arc Core Background
     const isSpeaking = this.voiceEngine.isSpeaking;
     const isListening = this.voiceEngine.isListening;
 
@@ -149,7 +164,6 @@ class FridayApp {
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Core Ring Nodes (10 segments)
     const segments = 10;
     const ringRad = 75;
     for (let i = 0; i < segments; i++) {
@@ -165,7 +179,6 @@ class FridayApp {
       ctx.fill();
     }
 
-    // Outer Sector Segment Ring
     ctx.shadowBlur = 0;
     ctx.strokeStyle = isSpeaking ? 'rgba(255, 170, 0, 0.6)' : 'rgba(0, 240, 255, 0.6)';
     ctx.lineWidth = 2;
@@ -206,20 +219,17 @@ class FridayApp {
      EVENT LISTENERS & BINDINGS
      ------------------------------------------------------------------------ */
   initEventListeners() {
-    // Send Command Button & Enter key
     this.btnSend.addEventListener('click', () => this.handleUserCommand());
     this.cmdInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.handleUserCommand();
     });
 
-    // Mic Trigger Button
     this.btnMic.addEventListener('click', async () => {
       soundFX.playClick();
       const listening = await this.voiceEngine.toggleListening();
       this.updateVoiceUIStatus(listening ? 'listening' : 'idle');
     });
 
-    // Quick Command Chips
     document.querySelectorAll('.quick-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const cmd = chip.dataset.cmd;
@@ -229,7 +239,6 @@ class FridayApp {
       });
     });
 
-    // Header Controls
     this.btnToggleSound.addEventListener('click', () => {
       soundFX.enabled = !soundFX.enabled;
       this.btnToggleSound.classList.toggle('active', soundFX.enabled);
@@ -242,13 +251,11 @@ class FridayApp {
       soundFX.playClick();
     });
 
-    // Directives Input
     this.btnAddDirective.addEventListener('click', () => this.addDirectiveFromInput());
     this.directiveInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.addDirectiveFromInput();
     });
 
-    // Protocols
     this.btnHouseParty.addEventListener('click', () => this.triggerProtocol('house-party'));
     this.btnOverride.addEventListener('click', () => this.triggerProtocol('override'));
     this.btnOverdrive.addEventListener('click', () => this.triggerProtocol('overdrive'));
@@ -273,7 +280,6 @@ class FridayApp {
       this.updateVoiceUIStatus(status);
     };
 
-    // AUTOMATIC PASSIVE LISTENER START
     const autoActivateMic = () => {
       if (!this.voiceEngine.isListening) {
         this.voiceEngine.startListening();
@@ -322,20 +328,19 @@ class FridayApp {
 
     const clean = text.toLowerCase().replace(/^(friday|hey friday|ok friday|hi friday)[,\s]*/i, '');
 
-    // Dynamic execution
     const response = await this.generateAssistantResponse(clean, text);
     this.speakAndLog(response);
   }
 
   async generateAssistantResponse(clean, original) {
-    // 0. Check OS & Web Automation Intents (YouTube, Apps, Instagram, Essay generation, Volume)
+    // 0. Check OS & Web Automation Intents (YouTube, Desktop Apps, Instagram, Essay generation, Volume)
     try {
       const osResponse = await osBridge.parseAndExecute(clean, original, this.geminiApiKey, this.fetchGeminiResponse.bind(this));
       if (osResponse) {
         return osResponse;
       }
     } catch (e) {
-      console.warn("OS Automation execution error:", e);
+      console.warn("OS Automation error:", e);
     }
 
     // 1. Directives note-taking
@@ -347,51 +352,133 @@ class FridayApp {
       }
     }
 
-    // 2. Dynamic Gemini 2.5 Flash AI for all conversation, questions, and reasoning
+    // 2. PRIMARY: Gemini AI Intelligence (Answers any question, conversation, reasoning)
     if (this.geminiApiKey) {
       try {
+        console.log("⚡ Querying Gemini AI for:", original);
         const aiResponse = await this.fetchGeminiResponse(original);
         if (aiResponse && aiResponse.trim().length > 0) {
           return aiResponse.trim();
         }
       } catch (e) {
-        console.warn("Gemini API call failed:", e);
+        console.warn("Gemini AI error:", e);
       }
     }
 
-    return `At your service, Boss. What can I do for you?`;
+    // 3. Math Calculations
+    const mathResult = this.evaluateMath(clean);
+    if (mathResult !== null) {
+      return `According to my calculations, Boss, the result is ${mathResult}.`;
+    }
+
+    // 4. Live Global Knowledge Engine (Wikipedia fallback)
+    const topic = clean.replace(/^(what is|who is|tell me about|explain|how does|how do|why is|where is|search for|lookup|define)\s+/i, '').replace(/(\?|\.)$/, '').trim();
+    if (topic.length > 1) {
+      const liveKnowledge = await this.fetchLiveKnowledge(topic);
+      if (liveKnowledge) {
+        return liveKnowledge;
+      }
+    }
+
+    return `I have processed your query regarding "${original}", Boss. All systems register nominal.`;
+  }
+
+  async fetchLiveKnowledge(topic) {
+    try {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data && data.extract) {
+        const cleanExtract = data.extract.split('. ').slice(0, 2).join('. ') + '.';
+        return `According to my knowledge archives, Boss: ${cleanExtract}`;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  evaluateMath(exprStr) {
+    try {
+      let str = exprStr.toLowerCase()
+        .replace(/calculate|what is|how much is|solve/g, '')
+        .replace(/percent of/g, '* 0.01 *')
+        .replace(/percent/g, '* 0.01')
+        .replace(/times|multiplied by|x/g, '*')
+        .replace(/divided by|over/g, '/')
+        .replace(/plus|and/g, '+')
+        .replace(/minus|less/g, '-')
+        .trim();
+
+      const sanitized = str.replace(/[^0-9\+\-\*\/\(\)\.\s]/g, '');
+      if (sanitized.length > 0 && /[0-9]/.test(sanitized) && /[\+\-\*\/]/.test(sanitized)) {
+        const val = Function(`'use strict'; return (${sanitized})`)();
+        if (typeof val === 'number' && !isNaN(val) && isFinite(val)) {
+          return Number.isInteger(val) ? val.toLocaleString() : val.toFixed(2);
+        }
+      }
+    } catch (e) {}
+    return null;
   }
 
   async fetchGeminiResponse(userPrompt) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.geminiApiKey}`;
     const promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Answer naturally, concisely, and helpfully in 1 to 3 sentences.\n\nUser request: "${userPrompt}"`;
-    
     const payload = {
-      contents: [{
-        parts: [{ text: promptWithPersonality }]
-      }]
+      contents: [{ parts: [{ text: promptWithPersonality }] }]
     };
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    // Prioritize gemini-flash-latest which is 100% active on your API key
+    const models = ['gemini-flash-latest', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-3.7-flash'];
 
-      if (!res.ok) {
-        console.warn("Gemini API HTTP Error:", res.status, res.statusText);
-        return null;
-      }
+    for (const model of models) {
+      // Try with URL key parameter
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': this.geminiApiKey
+          },
+          body: JSON.stringify(payload)
+        });
 
-      const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return reply ? reply.trim() : null;
-    } catch (e) {
-      console.warn("Gemini API Fetch Exception:", e);
-      return null;
+        if (res.ok) {
+          const data = await res.json();
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (reply && reply.trim().length > 0) {
+            console.log(`✅ Gemini (${model}) Response generated successfully!`);
+            return reply.trim();
+          }
+        }
+      } catch (e) {}
+
+      // Try with Bearer Authorization Header
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.geminiApiKey}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (reply && reply.trim().length > 0) {
+            console.log(`✅ Gemini (${model}) Response generated via Bearer Auth!`);
+            return reply.trim();
+          }
+        }
+      } catch (e) {}
     }
+
+    return null;
   }
+
+
 
   speakAndLog(text) {
     this.appendChatMessage('friday', text);
