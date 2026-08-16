@@ -51,13 +51,8 @@ export class OSBridge {
      1. OPEN WEB APPS (Direct Browser Anchor Click — Never Blocked)
      ------------------------------------------------------------------------ */
   openWebApp(url) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Send to Vite backend to avoid browser popup blockers
+    this.executeMacro([{ type: 'url', target: url }]);
     return true;
   }
 
@@ -120,12 +115,51 @@ export class OSBridge {
     return null;
   }
 
+  async searchFiles(query, folder = 'all') {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/search-files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, folder })
+      });
+      return await res.json();
+    } catch (e) { return { success: false }; }
+  }
+
+  async executeMacro(steps) {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/execute-macro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steps })
+      });
+      return await res.json();
+    } catch (e) { return { success: false }; }
+  }
+
   /* ------------------------------------------------------------------------
-     INTENT PARSER & TASK ROUTER
+     2. PARSE AND EXECUTE INTENT
      ------------------------------------------------------------------------ */
-  async parseAndExecute(cleanQuery, rawQuery, geminiApiKey, fetchGeminiResponseFn) {
-    const q = (cleanQuery || '').toLowerCase();
-    const raw = (rawQuery || '').trim();
+  async parseAndExecute(cleanQuery, rawPrompt, fetchGroqResponseFn) {
+    const q = cleanQuery.toLowerCase().trim();
+    const raw = rawPrompt.trim();
+
+    // ============================================
+    // FILE SEARCH INTENT
+    // ============================================
+    if (q.includes('find file') || q.includes('search file') || q.includes('locate file') ||
+        q.includes('find files') || q.includes('search files') || q.includes('locate files') ||
+        q.includes('find document') || q.includes('search document') || q.includes('find documents') || q.includes('search documents')) {
+      const fileQuery = q.replace(/^.*(find|search|locate)\s+(files|documents|file|document)\b\s*/i, '').trim();
+      if (fileQuery.length > 0) {
+        const searchRes = await this.searchFiles(fileQuery);
+        if (searchRes.success && searchRes.files?.length > 0) {
+          const fileList = searchRes.files.map(f => f.name).join(', ');
+          return `I found ${searchRes.count} matching files, Boss: ${fileList}.`;
+        }
+        return `I searched your system for "${fileQuery}", but found no matching files, Boss.`;
+      }
+    }
 
     // ============================================
     // A. DESKTOP APP LAUNCH INTENTS (WITH PHONETIC ALIASES)
@@ -163,8 +197,8 @@ export class OSBridge {
         if (isAlsoEssay) {
           const topic = extractSearchQuery(raw.replace(new RegExp(`.*?\\b(${key})\\b`, 'i'), ''), 'essay') || "Iron Man";
           let essayContent = '';
-          if (fetchGeminiResponseFn && geminiApiKey) {
-            essayContent = await fetchGeminiResponseFn(`Write a comprehensive 4-paragraph essay on "${topic}".`);
+          if (fetchGroqResponseFn) {
+            essayContent = await fetchGroqResponseFn(`Write a comprehensive 4-paragraph essay on "${topic}".`);
           }
           if (!essayContent) essayContent = `# Essay: ${topic}\n\n${topic} represents an iconic subject in modern engineering and science.`;
           
@@ -186,9 +220,9 @@ export class OSBridge {
       const topic = topicMatch || 'Iron Man';
 
       let essayContent = '';
-      if (fetchGeminiResponseFn && geminiApiKey) {
+      if (fetchGroqResponseFn) {
         const prompt = `Write a comprehensive, well-structured 4-paragraph essay on: "${topic}". Include a Title, Introduction, Body, and Conclusion.`;
-        essayContent = await fetchGeminiResponseFn(prompt);
+        essayContent = await fetchGroqResponseFn(prompt);
       }
 
       if (!essayContent) {
@@ -335,6 +369,23 @@ export class OSBridge {
         });
         return `Audio muted, Boss.`;
       } catch (e) {}
+    }
+
+    // ============================================
+    // E. GENERIC OPEN APP/URL FALLBACK
+    // ============================================
+    const genericOpenMatch = q.match(/^(open|launch|go to)\s+(.+)$/i);
+    if (genericOpenMatch) {
+      const target = genericOpenMatch[2].trim();
+      // If it has a dot and no spaces (like youtube.com), treat as url
+      if (target.includes('.') && !target.includes(' ')) {
+        this.executeMacro([{ type: 'url', target }]);
+        return `Opening ${target}, Boss.`;
+      } else {
+        // Assume it's a desktop app
+        this.executeMacro([{ type: 'app', target }]);
+        return `Attempting to launch ${target}, Boss.`;
+      }
     }
 
     return null; // Not an OS intent -> fallback to Gemini AI

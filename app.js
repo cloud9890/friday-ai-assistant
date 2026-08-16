@@ -1,14 +1,17 @@
 /* ==========================================================================
-   F.R.I.D.A.Y. // CORE APPLICATION CONTROLLER & CANVAS VISUALIZER
+   F.R.I.D.A.Y. 2.0 // CORE APPLICATION CONTROLLER & HOLOGRAPHIC VISUALIZER
    ========================================================================== */
 
 import { soundFX } from './sound-fx.js';
 import { VoiceEngine } from './voice-engine.js';
 import { osBridge } from './os-bridge.js';
+import { VisionEngine } from './vision-engine.js';
+import { memoryStore } from './memory-store.js';
 
 class FridayApp {
   constructor() {
     this.voiceEngine = new VoiceEngine();
+    this.visionEngine = new VisionEngine();
     
     // Application State
     this.directives = [
@@ -16,7 +19,7 @@ class FridayApp {
       { id: 2, text: "Run quantum network vulnerability audit", completed: true },
       { id: 3, text: "Verify Malibu mansion perimeter defense", completed: false }
     ];
-    this.geminiApiKey = import.meta.env?.VITE_GEMINI_API_KEY || '';
+    this.aiProviderReady = false;
     
     // System Telemetry State
     this.telemetry = {
@@ -41,25 +44,33 @@ class FridayApp {
     this.initVoiceCallbacks();
     this.startClockTicker();
     this.startTelemetrySimulator();
-    this.renderDirectives();
+    this.loadPersistentData();
 
     // Initial F.R.I.D.A.Y. greeting sound
     soundFX.playPowerUp();
-    this.verifyGeminiKey();
+    this.verifyGroqKey();
+    this.startHologramSync();
   }
 
-  async verifyGeminiKey() {
-    if (!this.geminiApiKey) {
-      console.warn("⚠️ No VITE_GEMINI_API_KEY detected in .env file.");
-      return;
-    }
-    console.log("🔍 Testing Gemini API Key connectivity with Google servers...");
-    const testPrompt = "Say: Stark Neural Matrix Online.";
-    const result = await this.fetchGeminiResponse(testPrompt);
-    if (result) {
-      console.log("⚡ [GEMINI STATUS: ONLINE & ACTIVE] -> Response:", result);
-    } else {
-      console.error("❌ [GEMINI STATUS: FAILED] -> Key is invalid, expired, or rejected by Google Generative AI API.");
+  async verifyGroqKey() {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'Say: Online.' }],
+          max_tokens: 10
+        }),
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        console.log("⚡ [GROQ STATUS: ONLINE & ACTIVE]");
+        this.aiProviderReady = true;
+      } else {
+        console.warn(`⚠️ [GEMINI STATUS: HTTP ${res.status}] — API may have rate limits.`);
+      }
+    } catch (e) {
+      console.warn("⚠️ [GEMINI STATUS: UNREACHABLE]", e.message);
     }
   }
 
@@ -124,9 +135,14 @@ class FridayApp {
   }
 
   /* ------------------------------------------------------------------------
-     CANVAS VISUALIZER (ARC REACTOR & SPECTRUM)
+     CANVAS VISUALIZER (ARC REACTOR & SPECTRUM) + 3D HOLOGRAM
      ------------------------------------------------------------------------ */
   initCanvas() {
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+
     const render = () => {
       this.drawArcReactor();
       this.drawSpectrum();
@@ -136,83 +152,183 @@ class FridayApp {
   }
 
   drawArcReactor() {
+    if (!this.arcCtx || !this.arcCanvas) return;
     const ctx = this.arcCtx;
     const w = this.arcCanvas.width;
     const h = this.arcCanvas.height;
     const cx = w / 2;
     const cy = h / 2;
-    const time = Date.now() * 0.002;
+    const time = Date.now() * 0.0015;
 
     ctx.clearRect(0, 0, w, h);
 
     const isSpeaking = this.voiceEngine.isSpeaking;
     const isListening = this.voiceEngine.isListening;
 
-    let glowColor = 'rgba(0, 240, 255, ';
-    if (isSpeaking) glowColor = 'rgba(255, 170, 0, ';
-    if (isListening) glowColor = 'rgba(0, 255, 170, ';
+    // Get voice frequency data for core pulse
+    const freqData = this.voiceEngine.getFrequencyData();
+    let avgFreq = 0;
+    for (let i = 0; i < freqData.length; i++) avgFreq += freqData[i];
+    avgFreq = (avgFreq / freqData.length) / 255;
 
-    const rad = 65 + (isSpeaking ? Math.sin(time * 10) * 8 : Math.sin(time * 2) * 3);
-    const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, rad + 25);
+    let primaryColor = '#00f0ff';
+    let glowRgb = '0, 240, 255';
+    if (isSpeaking) {
+      primaryColor = '#ffaa00';
+      glowRgb = '255, 170, 0';
+    } else if (isListening) {
+      primaryColor = '#00ffaa';
+      glowRgb = '0, 255, 170';
+    }
+
+    // 1. Central Core Glow Gradient
+    const corePulse = 48 + Math.sin(time * 3) * 3 + (avgFreq * 25);
+    const grad = ctx.createRadialGradient(cx, cy, 5, cx, cy, corePulse + 30);
     grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(0.3, glowColor + '0.8)');
-    grad.addColorStop(0.7, glowColor + '0.3)');
+    grad.addColorStop(0.25, `rgba(${glowRgb}, 0.85)`);
+    grad.addColorStop(0.65, `rgba(${glowRgb}, 0.25)`);
     grad.addColorStop(1, 'transparent');
 
     ctx.beginPath();
-    ctx.arc(cx, cy, rad + 20, 0, Math.PI * 2);
+    ctx.arc(cx, cy, corePulse + 30, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
 
-    const segments = 10;
-    const ringRad = 75;
-    for (let i = 0; i < segments; i++) {
-      const angle = (i * (Math.PI * 2 / segments)) + (time * 0.5);
-      const nx = cx + Math.cos(angle) * ringRad;
-      const ny = cy + Math.sin(angle) * ringRad;
-
-      ctx.beginPath();
-      ctx.arc(nx, ny, isSpeaking ? 6 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = isSpeaking ? '#ffaa00' : '#00f0ff';
-      ctx.shadowColor = isSpeaking ? '#ffaa00' : '#00f0ff';
-      ctx.shadowBlur = 10;
-      ctx.fill();
-    }
-
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = isSpeaking ? 'rgba(255, 170, 0, 0.6)' : 'rgba(0, 240, 255, 0.6)';
-    ctx.lineWidth = 2;
+    // 2. Outer Rotating HUD Ring (Clockwise)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(time * 0.5);
+    ctx.strokeStyle = `rgba(${glowRgb}, 0.4)`;
+    ctx.lineWidth = 1.5;
     for (let i = 0; i < 4; i++) {
-      const startA = (i * Math.PI / 2) + (time * (i % 2 === 0 ? 0.8 : -0.8));
       ctx.beginPath();
-      ctx.arc(cx, cy, 105, startA, startA + (Math.PI / 3));
+      ctx.arc(0, 0, 102, (i * Math.PI / 2), (i * Math.PI / 2) + Math.PI / 3);
       ctx.stroke();
     }
+    ctx.restore();
+
+    // 3. Counter-Rotating Dashed Ring
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-time * 0.7);
+    ctx.strokeStyle = `rgba(${glowRgb}, 0.6)`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    ctx.arc(0, 0, 90, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // 4. 10 Rotating Coils / Repulsor Nodes
+    const segments = 10;
+    const coilRadius = 72;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(time * 0.3);
+
+    for (let i = 0; i < segments; i++) {
+      const angle = (i * (Math.PI * 2 / segments));
+      const nx = Math.cos(angle) * coilRadius;
+      const ny = Math.sin(angle) * coilRadius;
+
+      // Draw coil node
+      ctx.beginPath();
+      ctx.arc(nx, ny, isSpeaking ? 5.5 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = primaryColor;
+      ctx.shadowColor = primaryColor;
+      ctx.shadowBlur = 12;
+      ctx.fill();
+
+      // Connector line to center
+      ctx.beginPath();
+      ctx.moveTo(nx * 0.65, ny * 0.65);
+      ctx.lineTo(nx * 0.9, ny * 0.9);
+      ctx.strokeStyle = `rgba(${glowRgb}, 0.5)`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 5. Inner Accent Ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, 48, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(${glowRgb}, 0.8)`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   drawSpectrum() {
+    if (!this.spectrumCtx || !this.spectrumCanvas) return;
     const ctx = this.spectrumCtx;
     const w = this.spectrumCanvas.width;
     const h = this.spectrumCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const bars = 48;
-    const barWidth = w / bars;
-    const time = Date.now() * 0.005;
+    const isSpeaking = this.voiceEngine.isSpeaking;
+    const isListening = this.voiceEngine.isListening;
+    const freqData = this.voiceEngine.getFrequencyData();
+    const len = freqData.length;
 
-    const isActive = this.voiceEngine.isSpeaking || this.voiceEngine.isListening;
-
-    for (let i = 0; i < bars; i++) {
-      let height = isActive 
-        ? (Math.sin(i * 0.4 + time * 3) * 0.5 + 0.5) * (h * 0.85) + 3
-        : (Math.sin(i * 0.2 + time) * 0.5 + 0.5) * 4 + 2;
-
-      const x = i * barWidth;
-      const y = h - height;
-
-      ctx.fillStyle = this.voiceEngine.isSpeaking ? '#ffaa00' : '#00f0ff';
-      ctx.fillRect(x + 1, y, barWidth - 2, height);
+    let strokeColor = '#00f0ff';
+    let fillColor = 'rgba(0, 240, 255, 0.15)';
+    if (isSpeaking) {
+      strokeColor = '#ffaa00';
+      fillColor = 'rgba(255, 170, 0, 0.2)';
+    } else if (isListening) {
+      strokeColor = '#00ffaa';
+      fillColor = 'rgba(0, 255, 170, 0.2)';
     }
+
+    const midY = h / 2;
+    const step = w / (len - 1);
+
+    // 1. Draw Equalizer Frequency Bars
+    ctx.fillStyle = strokeColor;
+    const barW = (w / len) * 0.6;
+    for (let i = 0; i < len; i++) {
+      const val = (freqData[i] / 255) * (h * 0.75);
+      const x = i * (w / len) + 2;
+      const barH = Math.max(2, val);
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(x, h - barH, barW, barH);
+    }
+    ctx.globalAlpha = 1.0;
+
+    // 2. Draw Smooth Voice Frequency Waveform Line
+    ctx.beginPath();
+    ctx.moveTo(0, midY);
+
+    for (let i = 0; i < len; i++) {
+      const x = i * step;
+      const amplitude = ((freqData[i] - 128) / 128) * (h * 0.42);
+      const y = midY - amplitude;
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        const prevX = (i - 1) * step;
+        const prevY = midY - (((freqData[i - 1] - 128) / 128) * (h * 0.42));
+        const cpX = (prevX + x) / 2;
+        ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
+      }
+    }
+
+    ctx.lineTo(w, midY);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = strokeColor;
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Fill underneath wave
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
   }
 
   /* ------------------------------------------------------------------------
@@ -229,6 +345,27 @@ class FridayApp {
       const listening = await this.voiceEngine.toggleListening();
       this.updateVoiceUIStatus(listening ? 'listening' : 'idle');
     });
+
+    // Share Screen button for Vision Engine
+    const btnShareScreen = document.getElementById('btnShareScreen');
+    if (btnShareScreen) {
+      btnShareScreen.addEventListener('click', async () => {
+        soundFX.playClick();
+        if (this.visionEngine.isSharing) {
+          this.visionEngine.stopScreenShare();
+          btnShareScreen.classList.remove('active');
+          this.speakAndLog("Screen sharing deactivated, Boss.");
+        } else {
+          const started = await this.visionEngine.startScreenShare();
+          if (started) {
+            btnShareScreen.classList.add('active');
+            this.speakAndLog("Visual cortex online. I can now see your screen, Boss. Say 'inspect my screen' for analysis.");
+          } else {
+            this.speakAndLog("Screen sharing could not be started, Boss. Please check your browser permissions.");
+          }
+        }
+      });
+    }
 
     document.querySelectorAll('.quick-chip').forEach(chip => {
       chip.addEventListener('click', () => {
@@ -325,17 +462,120 @@ class FridayApp {
     this.cmdInput.value = '';
     this.appendChatMessage('user', text);
     soundFX.playClick();
+    memoryStore.saveMessage('user', text).catch(e => console.warn('Memory save user error:', e));
 
-    const clean = text.toLowerCase().replace(/^(friday|hey friday|ok friday|hi friday)[,\s]*/i, '');
+    // Show immediate thinking placeholder
+    const thinkingId = this.showThinkingIndicator();
+    this.updateVoiceUIStatus('speaking');
 
-    const response = await this.generateAssistantResponse(clean, text);
-    this.speakAndLog(response);
+    const clean = text.toLowerCase().replace(/^(friday|hey friday|ok friday|hi friday)[,\s]*/i, '').trim();
+
+    // Explicit barge-in / stop override
+    if (clean === 'stop' || clean === 'quiet' || clean === 'cancel' || clean === 'shut up' || clean === 'pause') {
+      this.resolveThinkingIndicator(thinkingId, "Standing by, Boss.");
+      this.voiceEngine.stopSpeaking();
+      return;
+    }
+
+    try {
+      const response = await this.generateAssistantResponse(clean, text);
+      this.resolveThinkingIndicator(thinkingId, response);
+      this.voiceEngine.speak(response);
+      memoryStore.saveMessage('friday', response).catch(e => console.warn('Memory save assistant error:', e));
+    } catch (err) {
+      console.error("Assistant execution error:", err);
+      const fallback = "Systems are recalibrating, Boss. I encountered a minor telemetry sync delay.";
+      this.resolveThinkingIndicator(thinkingId, fallback);
+      this.voiceEngine.speak(fallback);
+    }
+  }
+
+  showThinkingIndicator() {
+    const id = `thinking_${Date.now()}`;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-msg msg-friday thinking';
+    msgDiv.id = id;
+
+    const authorDiv = document.createElement('div');
+    authorDiv.className = 'msg-author';
+    authorDiv.textContent = 'F.R.I.D.A.Y.';
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'msg-content';
+    contentDiv.innerHTML = `<span>Processing tactical query</span><span class="thinking-dots"><span></span><span></span><span></span></span>`;
+
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'msg-time';
+    timeDiv.textContent = 'ANALYZING...';
+
+    msgDiv.appendChild(authorDiv);
+    msgDiv.appendChild(contentDiv);
+    msgDiv.appendChild(timeDiv);
+
+    this.chatStream.appendChild(msgDiv);
+    this.chatStream.scrollTop = this.chatStream.scrollHeight;
+    return id;
+  }
+
+  resolveThinkingIndicator(id, finalResponse) {
+    const thinkingEl = document.getElementById(id);
+    if (thinkingEl) {
+      thinkingEl.className = 'chat-msg msg-friday';
+      const contentEl = thinkingEl.querySelector('.msg-content');
+      if (contentEl) contentEl.textContent = finalResponse;
+      const timeEl = thinkingEl.querySelector('.msg-time');
+      if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
+    } else {
+      this.appendChatMessage('friday', finalResponse);
+    }
   }
 
   async generateAssistantResponse(clean, original) {
-    // 0. Check OS & Web Automation Intents (YouTube, Desktop Apps, Instagram, Essay generation, Volume)
+    // 0. Vision / Screen Inspection
+    const isVisionIntent = clean.includes('inspect') || 
+                           clean.includes('screen') || 
+                           clean.includes('display') || 
+                           clean.includes('look at') || 
+                           clean.includes('what do you see') || 
+                           clean.includes('read my screen') || 
+                           clean.includes('analyze') && (clean.includes('this') || clean.includes('screen')) ||
+                           clean.includes('check my screen') ||
+                           clean.includes('vision');
+
+    if (isVisionIntent) {
+      if (!this.visionEngine.isSharing) {
+        const btnShareScreen = document.getElementById('btnShareScreen');
+        const started = await this.visionEngine.startScreenShare();
+        if (!started) {
+          return "I don't have access to your screen yet, Boss. Please click the 👁️ Share Screen button in the top bar.";
+        }
+        if (btnShareScreen) btnShareScreen.classList.add('active');
+      }
+      return await this.visionEngine.analyzeScreen(original);
+    }
+
+    // 0b. Memory recall
+    if (clean.includes('what did we') || clean.includes('what were we') ||
+        clean.includes('remember when') || clean.includes('recall') ||
+        clean.includes('our last conversation') || clean.includes('search memory')) {
+      const query = clean.replace(/^(what did we|what were we|remember when|recall|search memory for)\s*/i, '').trim();
+      const memories = await memoryStore.searchMemory(query || clean);
+      if (memories.length > 0) {
+        const summary = memories.slice(-5).map(m => `${m.role === 'user' ? 'You' : 'I'}: ${m.text}`).join('\n');
+        if (this.aiProviderReady) {
+          const aiSummary = await this.fetchGroqResponse(
+            `Summarize these past conversation fragments for the user in 1-2 sentences (address them as 'Boss'): \n${summary}`
+          );
+          if (aiSummary) return aiSummary;
+        }
+        return `From my memory archives, Boss: ${memories[memories.length - 1].text}`;
+      }
+      return "I don't have any matching records in my memory archives for that query, Boss.";
+    }
+
+    // 1. Check OS & Web Automation Intents
     try {
-      const osResponse = await osBridge.parseAndExecute(clean, original, this.geminiApiKey, this.fetchGeminiResponse.bind(this));
+      const osResponse = await osBridge.parseAndExecute(clean, original, this.fetchGroqResponse.bind(this));
       if (osResponse) {
         return osResponse;
       }
@@ -343,7 +583,7 @@ class FridayApp {
       console.warn("OS Automation error:", e);
     }
 
-    // 1. Directives note-taking
+    // 2. Directives note-taking
     if (clean.startsWith('note down') || clean.startsWith('add directive') || clean.startsWith('remind me')) {
       const taskText = original.replace(/^(friday|hey friday)[,\s]*/i, '').replace(/^(note down|add directive|remind me to|remind me)[,\s]*/i, '');
       if (taskText) {
@@ -352,11 +592,16 @@ class FridayApp {
       }
     }
 
-    // 2. PRIMARY: Gemini AI Intelligence (Answers any question, conversation, reasoning)
-    if (this.geminiApiKey) {
+    // 3. PRIMARY: Fast Groq AI Intelligence with conversation memory
+    if (this.aiProviderReady) {
       try {
-        console.log("⚡ Querying Gemini AI for:", original);
-        const aiResponse = await this.fetchGeminiResponse(original);
+        console.log("⚡ Querying Groq AI for:", original);
+        // Build conversation context from memory (last 4 turns for speed)
+        const context = await memoryStore.buildConversationContext(4);
+        const promptWithContext = context
+          ? `Previous context:\n${context}\n\nCurrent request: "${original}"`
+          : original;
+        const aiResponse = await this.fetchGroqResponse(promptWithContext);
         if (aiResponse && aiResponse.trim().length > 0) {
           return aiResponse.trim();
         }
@@ -365,13 +610,13 @@ class FridayApp {
       }
     }
 
-    // 3. Math Calculations
+    // 4. Math Calculations
     const mathResult = this.evaluateMath(clean);
     if (mathResult !== null) {
       return `According to my calculations, Boss, the result is ${mathResult}.`;
     }
 
-    // 4. Live Global Knowledge Engine (Wikipedia fallback)
+    // 5. Live Global Knowledge Engine (Wikipedia fallback)
     const topic = clean.replace(/^(what is|who is|tell me about|explain|how does|how do|why is|where is|search for|lookup|define)\s+/i, '').replace(/(\?|\.)$/, '').trim();
     if (topic.length > 1) {
       const liveKnowledge = await this.fetchLiveKnowledge(topic);
@@ -386,7 +631,7 @@ class FridayApp {
   async fetchLiveKnowledge(topic) {
     try {
       const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
       if (!res.ok) return null;
       const data = await res.json();
       if (data && data.extract) {
@@ -420,65 +665,37 @@ class FridayApp {
     return null;
   }
 
-  async fetchGeminiResponse(userPrompt) {
-    const promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Answer naturally, concisely, and helpfully in 1 to 3 sentences.\n\nUser request: "${userPrompt}"`;
-    const payload = {
-      contents: [{ parts: [{ text: promptWithPersonality }] }]
-    };
+  async fetchGroqResponse(userPrompt) {
+    const promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Answer naturally, concisely, and punchily in 1 to 2 short sentences.`;
 
-    // Prioritize gemini-flash-latest which is 100% active on your API key
-    const models = ['gemini-flash-latest', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-3.7-flash'];
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: promptWithPersonality },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 120,
+          temperature: 0.6
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
 
-    for (const model of models) {
-      // Try with URL key parameter
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': this.geminiApiKey
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (reply && reply.trim().length > 0) {
-            console.log(`✅ Gemini (${model}) Response generated successfully!`);
-            return reply.trim();
-          }
-        }
-      } catch (e) {}
-
-      // Try with Bearer Authorization Header
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.geminiApiKey}`
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (reply && reply.trim().length > 0) {
-            console.log(`✅ Gemini (${model}) Response generated via Bearer Auth!`);
-            return reply.trim();
-          }
-        }
-      } catch (e) {}
+      if (!res.ok) throw new Error(`Groq API HTTP ${res.status}`);
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content;
+      if (!reply || reply.trim().length === 0) throw new Error(`Groq API empty response`);
+      console.log(`✅ Groq responded quickly!`);
+      return reply.trim();
+    } catch (e) {
+      console.warn("Groq API failed:", e.errors || e.message);
+      return null;
     }
-
-    return null;
   }
-
-
 
   speakAndLog(text) {
     this.appendChatMessage('friday', text);
@@ -510,8 +727,18 @@ class FridayApp {
   }
 
   /* ------------------------------------------------------------------------
-     DIRECTIVES & TASKS
+     DIRECTIVES & TASKS (with IndexedDB persistence)
      ------------------------------------------------------------------------ */
+  async loadPersistentData() {
+    // Load directives from IndexedDB
+    const saved = await memoryStore.loadDirectives();
+    if (saved && saved.length > 0) {
+      this.directives = saved;
+      console.log(`🧠 Loaded ${saved.length} persistent directives from memory`);
+    }
+    this.renderDirectives();
+  }
+
   addDirectiveFromInput() {
     const text = this.directiveInput.value.trim();
     if (!text) return;
@@ -524,12 +751,14 @@ class FridayApp {
     const newDir = { id: Date.now(), text, completed: false };
     this.directives.unshift(newDir);
     this.renderDirectives();
+    memoryStore.saveDirectives(this.directives);
   }
 
   deleteDirective(id) {
     this.directives = this.directives.filter(d => d.id !== id);
     soundFX.playClick();
     this.renderDirectives();
+    memoryStore.saveDirectives(this.directives);
   }
 
   toggleDirective(id) {
@@ -538,6 +767,7 @@ class FridayApp {
       dir.completed = !dir.completed;
       soundFX.playClick();
       this.renderDirectives();
+      memoryStore.saveDirectives(this.directives);
     }
   }
 

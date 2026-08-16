@@ -48,6 +48,14 @@
       </div>
 
       <div class="header-controls">
+        <button id="btnShareScreen" class="icon-btn" title="Share Screen for Vision" aria-label="Share Screen for Vision">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </button>
+
         <button id="btnToggleSound" class="icon-btn active" title="Toggle Sound FX">
           <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -172,13 +180,14 @@
     <!-- CENTER PANEL: Arc Reactor Visualizer & Core Chat Assistant -->
     <section class="hud-panel center-panel">
 
-      <!-- Central Arc Reactor Canvas Core -->
+      <!-- Central Arc Reactor — 3D Hologram Container -->
       <div class="arc-reactor-container">
         <div class="orbital-ring ring-outer"></div>
         <div class="orbital-ring ring-mid"></div>
         <div class="orbital-ring ring-inner"></div>
 
-        <canvas id="arcCanvas" width="340" height="340"></canvas>
+        <!-- 2D Arc Reactor Visualizer -->
+        <canvas id="arcCanvas" width="220" height="220"></canvas>
 
         <div class="reactor-center-info">
           <span class="reactor-title">F.R.I.D.A.Y.</span>
@@ -236,10 +245,10 @@
         <div class="quick-commands">
           <button class="quick-chip" data-cmd="Friday, run full system diagnostics">Diagnostics</button>
           <button class="quick-chip" data-cmd="Friday, suit status update">Suit Status</button>
+          <button class="quick-chip" data-cmd="Friday, inspect my screen">👁️ Inspect Screen</button>
           <button class="quick-chip" data-cmd="Friday, scan environment">Environment Scan</button>
           <button class="quick-chip" data-cmd="Friday, house party protocol">House Party Protocol</button>
-          <button class="quick-chip" data-cmd="Friday, calculate 15 percent of 4500">Calculator</button>
-          <button class="quick-chip" data-cmd="Friday, note down calibrate repulsor arrays">Add Note</button>
+          <button class="quick-chip" data-cmd="Friday, recall our last conversation">🧠 Recall Memory</button>
         </div>
       </div>
     </section>

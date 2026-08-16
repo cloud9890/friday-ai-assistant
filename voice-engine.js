@@ -1,5 +1,5 @@
 /* ==========================================================================
-   F.R.I.D.A.Y. // CONSISTENT VOICE ENGINE (ELEVENLABS + LOCKED WEBSPEECH)
+   F.R.I.D.A.Y. // ULTRA-LOW LATENCY VOICE ENGINE (ELEVENLABS + WEBSPEECH)
    ========================================================================== */
 
 import { soundFX } from './sound-fx.js';
@@ -14,18 +14,21 @@ export class VoiceEngine {
     this.isSpeaking = false;
     this.voiceOutputEnabled = true;
     this.micPermissionGranted = false;
+    this.debug = false;
 
     // Fixed ElevenLabs API Configuration (Bella Voice - EXAVITQu4vr4xnSDxMaL)
-    this.elevenLabsApiKey = import.meta.env?.VITE_ELEVENLABS_API_KEY || '';
     this.elevenLabsVoiceId = import.meta.env?.VITE_ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
 
     this.currentAudio = null;
+    this.currentAudioUrl = null;
     this.wakeTimeout = null;
+    this.speakRequestId = 0;
+    this.currentAbortController = null;
 
     this.voices = [];
     this.selectedVoice = null;
     this.pitch = 1.05;
-    this.rate = 1.0;
+    this.rate = 1.05;
 
     // Callbacks
     this.onWakeWordCallback = null;
@@ -33,8 +36,71 @@ export class VoiceEngine {
     this.onSpeechStartCallback = null;
     this.onSpeechEndCallback = null;
 
+    // Web Audio API Frequency Analyser for real-time Voice Wave Spectrum
+    this.audioCtx = null;
+    this.analyser = null;
+    this.freqData = new Uint8Array(64);
+    this.initAudioAnalyser();
+
     this.initRecognition();
     this.loadVoices();
+  }
+
+  initAudioAnalyser() {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        this.audioCtx = new AudioContextClass();
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.fftSize = 128;
+        this.analyser.smoothingTimeConstant = 0.8;
+        this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+      }
+    } catch(e) {
+      console.warn("AudioContext setup failed:", e);
+    }
+  }
+
+  attachAudioSource(audioElement) {
+    if (!this.audioCtx || !this.analyser || !audioElement) return;
+    try {
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+      const source = this.audioCtx.createMediaElementSource(audioElement);
+      source.connect(this.analyser);
+      this.analyser.connect(this.audioCtx.destination);
+    } catch(e) {
+      // Elements might already be connected or CORS restricted
+    }
+  }
+
+  getFrequencyData() {
+    if (this.analyser && this.isSpeaking) {
+      this.analyser.getByteFrequencyData(this.freqData);
+      let sum = 0;
+      for (let i = 0; i < this.freqData.length; i++) sum += this.freqData[i];
+      if (sum > 0) return this.freqData;
+    }
+
+    // Dynamic voice frequency generator when speaking or listening
+    const time = Date.now() * 0.008;
+    const count = 32;
+    const synthData = new Uint8Array(count);
+    const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
+
+    for (let i = 0; i < count; i++) {
+      if (intensity < 0.1) {
+        synthData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
+      } else {
+        const formant1 = Math.sin(i * 0.4 + time * 3) * 0.5 + 0.5;
+        const formant2 = Math.cos(i * 0.7 - time * 5) * 0.5 + 0.5;
+        const harmonic = (formant1 * 0.6 + formant2 * 0.4) * 200 * intensity;
+        const noise = Math.random() * 40 * intensity;
+        synthData[i] = Math.min(255, Math.max(10, harmonic + noise));
+      }
+    }
+    return synthData;
   }
 
   async requestMicrophonePermission() {
@@ -100,11 +166,19 @@ export class VoiceEngine {
       const transcript = event.results[lastIdx][0].transcript.trim();
       if (!transcript) return;
 
-      console.log("Speech Result Heard:", transcript, "| Awake State:", this.isAwake);
+      if (this.debug) {
+        console.log("Speech Result Heard | Awake State:", this.isAwake, "| Speaking:", this.isSpeaking);
+      }
       const lower = transcript.toLowerCase();
       const wakeWordMatch = lower.match(/\b(friday|hey friday|ok friday|hi friday|hello friday|stark)\b/i);
 
       if (wakeWordMatch) {
+        // BARGE-IN: If speaking, immediately stop and process new command
+        if (this.isSpeaking) {
+          if (this.debug) console.log("⚡ BARGE-IN DETECTED — Interrupting speech");
+          this.stopSpeaking();
+        }
+
         const matchedWord = wakeWordMatch[0];
         const wordIndex = lower.indexOf(matchedWord);
         const commandAfterWakeWord = transcript.substring(wordIndex + matchedWord.length).replace(/^[,\s]+/, '').trim();
@@ -122,7 +196,11 @@ export class VoiceEngine {
           clearTimeout(this.wakeTimeout);
           this.wakeTimeout = setTimeout(() => this.resetWakeState(), 6000);
         }
-      } else if (this.isAwake) {
+      } else if (this.isAwake || (this.isSpeaking && lower.match(/\b(stop|quiet|cancel|shut up|pause)\b/))) {
+        if (this.isSpeaking) {
+          if (this.debug) console.log("⚡ BARGE-IN DETECTED (No Wake Word) — Interrupting speech");
+          this.stopSpeaking();
+        }
         if (this.onWakeWordCallback) {
           this.onWakeWordCallback(transcript);
         }
@@ -144,14 +222,12 @@ export class VoiceEngine {
 
     const lockVoice = () => {
       this.voices = this.synthesis.getVoices();
-      // Lock strictly to ONE fixed consistent female voice
       this.selectedVoice = this.voices.find(v => 
         v.name.includes("Google UK English Female") || 
         v.name.includes("Microsoft Zira") ||
         v.name.includes("Hazel") ||
         (v.lang.startsWith("en") && v.name.toLowerCase().includes("female"))
       ) || this.voices[0];
-      console.log("🔒 Locked Fallback Voice:", this.selectedVoice?.name);
     };
 
     lockVoice();
@@ -195,18 +271,27 @@ export class VoiceEngine {
   }
 
   async speak(text) {
-    if (!this.voiceOutputEnabled) return;
+    if (!this.voiceOutputEnabled || !text) return;
+
+    // Interrupt any current speech
+    this.stopSpeaking();
 
     const wasListening = this.isListening;
     if (this.recognition && this.isListening) {
       try { this.recognition.stop(); } catch(e) {}
     }
 
-    // 1. Exclusively use ElevenLabs AI Voice (Bella - EXAVITQu4vr4xnSDxMaL)
-    if (this.elevenLabsApiKey && this.elevenLabsVoiceId) {
-      await this.speakElevenLabs(text);
-    } else {
-      console.warn("ElevenLabs API Key not configured in .env. Falling back only if necessary.");
+    let played = false;
+    this.speakRequestId++;
+    const reqId = this.speakRequestId;
+
+    // 1. ElevenLabs AI Voice via secure server endpoint
+    if (this.elevenLabsVoiceId) {
+      played = await this.speakElevenLabs(text, reqId);
+    }
+
+    // 2. If ElevenLabs failed or wasn't available, instant WebSpeech fallback
+    if (!played) {
       this.speakWebSpeech(text);
     }
 
@@ -220,39 +305,46 @@ export class VoiceEngine {
           this.onStatusChangeCallback('standby');
         }
       }
-    }, 200);
+    }, 150);
   }
 
-  async speakElevenLabs(text) {
+  async speakElevenLabs(text, reqId) {
     try {
-      const url = `https://api.elevenlabs.io/v1/text-to-speech/${this.elevenLabsVoiceId}`;
+      if (this.currentAbortController) {
+        this.currentAbortController.abort();
+      }
+      this.currentAbortController = new AbortController();
 
-      const response = await fetch(url, {
+      const response = await fetch('/api/tts', {
         method: 'POST',
         headers: {
-          'Accept': 'audio/mpeg',
-          'xi-api-key': this.elevenLabsApiKey,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           text: text,
-          model_id: 'eleven_turbo_v2_5',
-          voice_settings: {
-            stability: 0.55,
-            similarity_boost: 0.85
-          }
-        })
+          voiceId: this.elevenLabsVoiceId
+        }),
+        signal: this.currentAbortController.signal
       });
 
       if (!response.ok) {
-        console.warn("ElevenLabs API HTTP Error:", response.status, response.statusText);
+        console.warn("ElevenLabs API HTTP Error:", response.status);
         return false;
       }
 
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
+      this.currentAudioUrl = audioUrl;
       this.currentAudio = new Audio(audioUrl);
+      this.attachAudioSource(this.currentAudio);
+
+      const cleanupAudioUrl = () => {
+        if (this.currentAudioUrl && this.currentAudioUrl === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          this.currentAudioUrl = null;
+        }
+      };
 
       this.currentAudio.onplay = () => {
         this.isSpeaking = true;
@@ -261,22 +353,29 @@ export class VoiceEngine {
       };
 
       this.currentAudio.onended = () => {
+        cleanupAudioUrl();
         this.isSpeaking = false;
         this.resetWakeState();
         if (this.onSpeechEndCallback) this.onSpeechEndCallback();
       };
 
       this.currentAudio.onerror = (e) => {
-        console.warn("ElevenLabs Audio Playback Error:", e);
+        cleanupAudioUrl();
+        console.warn("ElevenLabs Audio Error:", e);
         this.isSpeaking = false;
         this.resetWakeState();
         if (this.onSpeechEndCallback) this.onSpeechEndCallback();
       };
 
       await this.currentAudio.play();
+      if (reqId !== this.speakRequestId) {
+        this.currentAudio.pause();
+        return false;
+      }
       return true;
     } catch (e) {
-      console.warn("ElevenLabs TTS Exception:", e);
+      if (e.name === 'AbortError') return false;
+      console.warn("ElevenLabs TTS Timeout/Error -> Falling back to browser speech:", e.message);
       return false;
     }
   }
@@ -305,7 +404,6 @@ export class VoiceEngine {
     };
 
     utterance.onerror = (e) => {
-      console.warn("Speech Synthesis Error:", e);
       this.isSpeaking = false;
       this.resetWakeState();
       if (this.onSpeechEndCallback) this.onSpeechEndCallback();
@@ -315,9 +413,18 @@ export class VoiceEngine {
   }
 
   stopSpeaking() {
+    this.speakRequestId++;
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio = null;
+    }
+    if (this.currentAudioUrl) {
+      URL.revokeObjectURL(this.currentAudioUrl);
+      this.currentAudioUrl = null;
     }
     if (this.synthesis) {
       this.synthesis.cancel();
