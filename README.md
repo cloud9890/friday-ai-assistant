@@ -20,9 +20,10 @@ A futuristic, high-tech tactical AI desktop assistant inspired by Tony Stark's *
 - [x] Gemini 2.5 Flash conversational intelligence
 - [x] Web app navigation (YouTube latest video filters, Instagram, Spotify, Google Maps, GitHub)
 - [x] Automatic essay generator & desktop file saver
-- [x] System volume control & real-time hardware telemetry
+- [x] Advanced System volume control (Specific percentages via `keybd_event` hacks)
+- [x] Computer vision screen inspection via multimodal Qwen proxy (Groq)
+- [x] Enhanced desktop app launch (resolving `.lnk` Start Menu shortcuts via PowerShell)
 - [ ] Multi-window workspace management & macro scripts
-- [ ] Computer vision screen inspection via multimodal Gemini
 - [ ] Cross-platform Linux/macOS support
 
 ---
@@ -77,11 +78,12 @@ Create a `.env` file in the root directory (see `.env.example`):
 ```env
 VITE_ELEVENLABS_API_KEY=your_elevenlabs_api_key
 VITE_GEMINI_API_KEY=your_gemini_api_key
+VITE_GROQ_API_KEY=your_groq_api_key
 ```
 
 ---
 
 ## 🏗️ Tech Stack
 - **Frontend**: Vite, Vanilla JavaScript, Canvas 2D API, Web Audio API, Web Speech API
-- **AI Models**: Google Gemini 2.5 Flash, ElevenLabs Voice Synthesis
-- **OS Automation**: Vite Custom Middleware, Node.js OS Telemetry, Windows Task Scheduler API
+- **AI Models**: Google Gemini 2.5 Flash, Groq (Qwen 2.5 32B), ElevenLabs Voice Synthesis
+- **OS Automation**: Vite Custom Middleware, Node.js OS Telemetry, PowerShell Scripts

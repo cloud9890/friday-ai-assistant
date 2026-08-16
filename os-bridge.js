@@ -343,25 +343,54 @@ export class OSBridge {
     // ============================================
     // D. VOLUME CONTROL
     // ============================================
-    if (q.includes('volume up') || q.includes('increase volume')) {
+    const setVolMatch = q.match(/(?:set|change|make).*?volume.*?(?:to|at)\s*(\d+)/i) || q.match(/volume.*?(?:to|at)\s*(\d+)/i);
+    const upVolMatch = q.match(/(?:increase|raise).*?volume.*?(?:by)?\s*(\d+)/i) || q.match(/volume up(?: by)?\s*(\d+)/i);
+    const downVolMatch = q.match(/(?:decrease|lower|reduce|turn down).*?volume.*?(?:by)?\s*(\d+)/i) || q.match(/volume down(?: by)?\s*(\d+)/i);
+
+    if (setVolMatch) {
+      try {
+        const amount = parseInt(setVolMatch[1], 10);
+        await fetch(`${SERVER_URL}/api/system-volume`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'volume-set', amount })
+        });
+        return `System volume set to ${amount} percent, Boss.`;
+      } catch (e) {}
+    } else if (upVolMatch) {
+      try {
+        const amount = parseInt(upVolMatch[1], 10);
+        await fetch(`${SERVER_URL}/api/system-volume`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'volume-up', amount })
+        });
+        return `System volume increased by ${amount} percent, Boss.`;
+      } catch (e) {}
+    } else if (downVolMatch) {
+      try {
+        const amount = parseInt(downVolMatch[1], 10);
+        await fetch(`${SERVER_URL}/api/system-volume`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'volume-down', amount })
+        });
+        return `System volume decreased by ${amount} percent, Boss.`;
+      } catch (e) {}
+    } else if (q.includes('volume up') || q.includes('increase volume') || q.includes('turn it up') || q.includes('make it louder')) {
       try {
         await fetch(`${SERVER_URL}/api/system-volume`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'volume-up' })
+          body: JSON.stringify({ action: 'volume-up', amount: 10 })
         });
         return `System volume increased, Boss.`;
       } catch (e) {}
-    }
-    if (q.includes('volume down') || q.includes('lower volume')) {
+    } else if (q.includes('volume down') || q.includes('lower volume') || q.includes('turn it down') || q.includes('make it quieter')) {
       try {
         await fetch(`${SERVER_URL}/api/system-volume`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'volume-down' })
+          body: JSON.stringify({ action: 'volume-down', amount: 10 })
         });
         return `System volume lowered, Boss.`;
       } catch (e) {}
-    }
-    if (q.includes('mute audio') || q.includes('mute volume') || q === 'mute') {
+    } else if (q.includes('mute audio') || q.includes('mute volume') || q === 'mute' || q.includes('silence')) {
       try {
         await fetch(`${SERVER_URL}/api/system-volume`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
