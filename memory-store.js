@@ -137,6 +137,31 @@ class MemoryStore {
   }
 
   /* ----------------------------------------------------------------
+     PREFERENCES / FACTS (LONG-TERM MEMORY)
+     ---------------------------------------------------------------- */
+  async saveFact(key, value) {
+    await this.ready;
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('preferences', 'readwrite');
+      tx.onerror = () => reject(tx.error || new Error('Transaction error'));
+      const req = tx.objectStore('preferences').put({ key, value, timestamp: Date.now() });
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => resolve();
+    });
+  }
+
+  async getAllFacts() {
+    await this.ready;
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('preferences', 'readonly');
+      tx.onerror = () => reject(tx.error || new Error('Transaction error'));
+      const req = tx.objectStore('preferences').getAll();
+      req.onerror = () => reject(req.error);
+      req.onsuccess = (e) => resolve(e.target.result);
+    });
+  }
+
+  /* ----------------------------------------------------------------
      USER PREFERENCES
      ---------------------------------------------------------------- */
   async setPreference(key, value) {

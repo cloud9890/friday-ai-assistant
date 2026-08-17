@@ -7,22 +7,25 @@
 
 A futuristic, high-tech tactical AI desktop assistant inspired by Tony Stark's **F.R.I.D.A.Y.** (Female Replacement Intelligent Digital Assistant Youth), featuring:
 - **Always-On Passive Wake Word Activation** (*"Friday"* / *"Hey Friday"*)
-- **Voice Intelligence powered by ElevenLabs & Gemini 2.5 Flash AI**
+- **Voice Intelligence powered by ElevenLabs & Groq AI**
 - **Autonomous OS & Web Automation** (Open desktop apps, search YouTube/Google with filters, download essays, control system volume)
 - **Iron Man Arc Reactor Canvas Visualizer & HUD Sound FX (Web Audio API Synthesizer)**
-- **Real-Time Windows Hardware Telemetry** (CPU, RAM, Ping)
+- **Real-Time Windows Hardware Telemetry** (CPU, RAM) & **Media Controls** (Play/Pause)
+- **Long-Term Persona Memory** (IndexedDB powered permanent facts)
 
 ---
 
 ## 🚧 Development Roadmap (In Progress)
 - [x] Passive background wake-word listener (*"Friday"*)
 - [x] ElevenLabs voice synthesis with Web Speech fallback
-- [x] Gemini 2.5 Flash conversational intelligence
+- [x] Groq Conversational Intelligence (Automated Tool Prober)
 - [x] Web app navigation (YouTube latest video filters, Instagram, Spotify, Google Maps, GitHub)
 - [x] Automatic essay generator & desktop file saver
-- [x] Advanced System volume control (Specific percentages via `keybd_event` hacks)
-- [x] Computer vision screen inspection via multimodal Qwen proxy (Groq)
-- [x] Enhanced desktop app launch (resolving `.lnk` Start Menu shortcuts via PowerShell)
+- [x] Advanced System volume control & Media playback control
+- [x] Real-time system telemetry (CPU/RAM sensors)
+- [x] Autonomous web scraping (background content summarizer)
+- [x] Long-Term Persona Memory (IndexedDB)
+- [ ] Computer vision screen inspection via multimodal models
 - [ ] Multi-window workspace management & macro scripts
 - [ ] Cross-platform Linux/macOS support
 
@@ -36,16 +39,20 @@ A futuristic, high-tech tactical AI desktop assistant inspired by Tony Stark's *
 - Consistent **ElevenLabs Female Irish Tactical Voice** (with automatic Web Speech fallback).
 
 ### 2. ⚡ Autonomous OS & Web Control
-- **Desktop Apps**: Automatically launches Windows desktop apps (`Notepad`, `Calculator`, `VS Code`, `Task Manager`, `Paint`, `File Explorer`).
+- **Desktop Apps**: Automatically launches Windows desktop apps (`Notepad`, `Calculator`, `VS Code`, `Task Manager`).
 - **Web Navigation & Search**: 
-  - *"Friday, open YouTube and search for BBS and play the latest video"*
-  - *"Friday, open Instagram"*
   - *"Friday, search Google for quantum mechanics"*
-  - *"Friday, open Spotify and search for AC DC"*
-- **Essay & Paper Generator**: Automatically generates well-structured essays using Gemini AI and downloads them to your machine.
+  - *"Friday, play AC DC on YouTube"* (Triggers the Auto-Play scraper)
+- **Media & System Telemetry**: 
+  - *"Friday, pause the music"* (Hardware-level Virtual Key injection)
+  - *"Friday, how are our systems holding up?"* (Reads real-time Windows RAM/CPU usage)
 - **System Audio**: Control master volume (*"Friday, volume up"*, *"Friday, mute audio"*).
 
-### 3. 🛡️ Stark Tactical HUD & Visualizer
+### 3. 🧠 Long-Term Persona Memory
+- Give her permanent facts: *"Friday, remember that my favorite color is crimson red."*
+- She stores this in a local IndexedDB memory core and automatically injects it into her system prompt for all future conversations.
+
+### 4. 🛡️ Stark Tactical HUD & Visualizer
 - Dynamic animated Canvas **Arc Reactor** with audio waveform reactivity.
 - Stark OS Sound FX synthesized in real time with Web Audio API.
 - Live directives & task manager with audio confirmation.
@@ -76,14 +83,13 @@ Open **`http://127.0.0.1:5173/`** in your browser (Chrome or Edge recommended).
 ## ⚙️ Environment Variables (Optional)
 Create a `.env` file in the root directory (see `.env.example`):
 ```env
-VITE_ELEVENLABS_API_KEY=your_elevenlabs_api_key
-VITE_GEMINI_API_KEY=your_gemini_api_key
-VITE_GROQ_API_KEY=your_groq_api_key
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+GROQ_API_KEY=your_groq_api_key
 ```
 
 ---
 
 ## 🏗️ Tech Stack
-- **Frontend**: Vite, Vanilla JavaScript, Canvas 2D API, Web Audio API, Web Speech API
-- **AI Models**: Google Gemini 2.5 Flash, Groq (Qwen 2.5 32B), ElevenLabs Voice Synthesis
-- **OS Automation**: Vite Custom Middleware, Node.js OS Telemetry, PowerShell Scripts
+- **Frontend**: Vite, Vanilla JavaScript, Canvas 2D API, Web Audio API, Web Speech API, IndexedDB
+- **AI Models**: Groq (Llama 3.1 70B / Mixtral 8x7B), ElevenLabs Voice Synthesis
+- **OS Automation**: Vite Custom Middleware, Node.js OS Telemetry, PowerShell Scripts, System C# P/Invoke APIs

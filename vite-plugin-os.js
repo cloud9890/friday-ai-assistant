@@ -2,7 +2,7 @@
    F.R.I.D.A.Y. // VITE PLUGIN — OS CONTROL MIDDLEWARE (BULLETPROOF)
    ========================================================================== */
 
-import { exec, execSync } from 'child_process';
+import { exec, execSync, execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -73,39 +73,28 @@ function findAppShortcut(appName) {
 }
 
 function launchInInteractiveSession(target) {
-  const taskName = `Friday_${Date.now()}_${taskCounter++}`;
-  const batPath = path.join(os.tmpdir(), `${taskName}.bat`);
-
-  fs.writeFileSync(batPath, `@echo off\r\nstart "" "${target}"\r\nping -n 2 127.0.0.1 >nul\r\nschtasks /delete /tn "${taskName}" /f >nul 2>&1\r\ndel "%~f0" >nul 2>&1\r\n`, 'utf8');
-
-  try {
-    execSync(`schtasks /create /tn "${taskName}" /tr "\\"${batPath}\\"" /sc once /st 00:00 /f /it`, {
-      stdio: 'ignore',
-      timeout: 5000
-    });
-    execSync(`schtasks /run /tn "${taskName}"`, {
-      stdio: 'ignore',
-      timeout: 5000
-    });
-    console.log(`  ✅ schtasks launched: "${target}"`);
-    return true;
-  } catch (e) {
-    try {
-      if (target.startsWith('http://') || target.startsWith('https://')) {
-        exec(`explorer.exe "${target}"`);
-      } else {
-        exec(`start "" "${target}"`);
-      }
-      return true;
-    } catch (e2) {
-      try {
-        exec(`explorer.exe "${target}"`);
-        return true;
-      } catch (e3) {
-        return false;
-      }
+  return new Promise((resolve) => {
+    let cmd, args;
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+      cmd = 'explorer.exe';
+      args = [target];
+    } else {
+      cmd = 'powershell.exe';
+      args = ['-Command', `Start-Process '${target.replace(/'/g, "''")}'`];
     }
-  }
+    
+    execFile(cmd, args, { timeout: 5000 }, (err) => {
+      if (err) {
+        console.warn(`  ❌ Launch failed for "${target}":`, err.message);
+        exec(`start "" "${target}"`, (err2) => {
+          resolve(!err2);
+        });
+      } else {
+        console.log(`  ✅ Launched: "${target}"`);
+        resolve(true);
+      }
+    });
+  });
 }
 
 function parseBody(req) {
@@ -205,6 +194,40 @@ export default function fridayOSPlugin() {
         res.end(JSON.stringify({ success: true, action }));
       });
 
+      // --- MEDIA CONTROL ---
+      server.middlewares.use('/api/media-control', async (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+        const { action } = await parseBody(req);
+        
+        // Use native OS Virtual-Key Codes for global media control
+        // 0xB3 (179) = Play/Pause, 0xB0 (176) = Next, 0xB1 (177) = Prev
+        let vkCode = 179;
+        if (action === 'next') vkCode = 176;
+        else if (action === 'prev') vkCode = 177;
+        
+        const psScript = `
+          $code = @"
+          using System.Runtime.InteropServices;
+          public class Keyboard {
+              [DllImport("user32.dll")]
+              public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+          }
+"@
+          Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+          [Keyboard]::keybd_event(${vkCode}, 0, 0, 0)
+          [Keyboard]::keybd_event(${vkCode}, 0, 2, 0)
+        `;
+        
+        // Save the script to a temporary file to execute it safely without quoting issues
+        const tempScriptPath = path.join(os.tmpdir(), 'media_control.ps1');
+        fs.writeFileSync(tempScriptPath, psScript);
+        exec(`powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "${tempScriptPath}"`);
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.end(JSON.stringify({ success: true, action }));
+      });
+
       // --- SYSTEM STATS ---
       server.middlewares.use('/api/system-stats', (req, res) => {
         const totalMem = os.totalmem();
@@ -219,6 +242,64 @@ export default function fridayOSPlugin() {
           cpuUsagePercent: total > 0 ? Math.min(100, Math.max(5, Math.round(100 - (idle / total) * 100))) : 15,
           memUsagePercent: Math.round(((totalMem - freeMem) / totalMem) * 100)
         }));
+      });
+
+      // --- WEB SCRAPE / RESEARCH ---
+      server.middlewares.use('/api/web-scrape', async (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+        const { url } = await parseBody(req);
+        try {
+           const fetchRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+           let html = await fetchRes.text();
+           let text = html.replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '')
+                          .replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '')
+                          .replace(/<\/?[^>]+(>|$)/g, " ")
+                          .replace(/\s+/g, " ")
+                          .trim();
+           text = text.substring(0, 3000);
+           res.setHeader('Content-Type', 'application/json');
+           res.setHeader('Access-Control-Allow-Origin', '*');
+           res.end(JSON.stringify({ success: true, text }));
+        } catch(e) {
+           res.setHeader('Content-Type', 'application/json');
+           res.end(JSON.stringify({ success: false, error: e.message }));
+        }
+      });
+
+      // --- AUTO-PLAY MEDIA (YOUTUBE SCRAPER) ---
+      server.middlewares.use('/api/play-media', async (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+        const { query, platform } = await parseBody(req);
+        try {
+           let finalUrl = '';
+           if (platform === 'youtube') {
+             // Scrape YouTube search results for the first video ID
+             const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+             const fetchRes = await fetch(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+             const html = await fetchRes.text();
+             // Find first video ID
+             const match = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+             if (match && match[1]) {
+               finalUrl = `https://www.youtube.com/watch?v=${match[1]}`;
+             } else {
+               finalUrl = searchUrl; // fallback to search page
+             }
+           } else if (platform === 'spotify') {
+             finalUrl = `spotify:search:${encodeURIComponent(query)}`;
+           }
+           
+           if (finalUrl) {
+             const command = process.platform === 'win32' ? `start "" "${finalUrl}"` : process.platform === 'darwin' ? `open "${finalUrl}"` : `xdg-open "${finalUrl}"`;
+             exec(command);
+           }
+           
+           res.setHeader('Content-Type', 'application/json');
+           res.setHeader('Access-Control-Allow-Origin', '*');
+           res.end(JSON.stringify({ success: true, url: finalUrl }));
+        } catch(e) {
+           res.setHeader('Content-Type', 'application/json');
+           res.end(JSON.stringify({ success: false, error: e.message }));
+        }
       });
 
       // --- SECURE TTS PROXY ---
@@ -272,7 +353,7 @@ export default function fridayOSPlugin() {
       // --- SECURE CHAT PROXY (GROQ) ---
       server.middlewares.use('/api/chat', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
-        const { messages, max_tokens, temperature } = await parseBody(req);
+        const { messages, max_tokens, temperature, tools } = await parseBody(req);
         
         let apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
@@ -286,18 +367,69 @@ export default function fridayOSPlugin() {
         if (!apiKey) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Server missing Groq API key' })); return; }
 
         try {
+          // Automated Tool-Calling Probe (Zero Guesswork)
+          let validModel = 'mixtral-8x7b-32768'; // absolute worst-case fallback
+          if (!global.cachedValidModel) {
+            console.log("⏳ F.R.I.D.A.Y. is aggressively testing all your Groq models for tool-calling support...");
+            try {
+              const modelsRes = await fetch('https://api.groq.com/openai/v1/models', { 
+                headers: { 'Authorization': `Bearer ${apiKey}` },
+                signal: AbortSignal.timeout(8000)
+              });
+              if (!modelsRes.ok) throw new Error("API error");
+              const modelsData = await modelsRes.json();
+              if (!modelsData || !Array.isArray(modelsData.data)) throw new Error("Invalid response format");
+              const availableModels = modelsData.data.map(m => m.id);
+            
+            for (const model of availableModels) {
+              if (model.includes('whisper') || model.includes('vision') || model.includes('guard')) continue;
+              
+              const testRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model: model,
+                  messages: [{ role: 'user', content: 'test' }],
+                  max_tokens: 10,
+                  tools: [{ type: "function", function: { name: "test", description: "test", parameters: { type: "object", properties: {}, required: [] } } }]
+                })
+              });
+              
+               if (testRes.ok) {
+                 global.cachedValidModel = model;
+                 console.log(`✅ SUCCESS! Found compatible tool-calling model: ${model}`);
+                 break;
+               }
+             }
+             if (!global.cachedValidModel) {
+                console.error("❌ CRITICAL: NO models on your Groq account support tool calling!");
+             }
+            } catch(e) {
+               console.warn("❌ CRITICAL: Models validation failed:", e.message);
+            }
+          }
+          
+          validModel = global.cachedValidModel || validModel;
+
+          const payload = {
+            model: validModel,
+            messages: messages || [],
+            max_tokens: max_tokens || 150,
+            temperature: temperature || 0.6
+          };
+
+          if (tools && tools.length > 0) {
+            payload.tools = tools;
+            payload.tool_choice = "auto";
+          }
+
           const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-              model: 'llama-3.3-70b-versatile',
-              messages: messages || [],
-              max_tokens: max_tokens || 150,
-              temperature: temperature || 0.6
-            }),
+            body: JSON.stringify(payload),
             signal: AbortSignal.timeout(8000)
           });
           
