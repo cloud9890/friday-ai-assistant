@@ -12,7 +12,7 @@ class FridayApp {
   constructor() {
     this.voiceEngine = new VoiceEngine();
     this.visionEngine = new VisionEngine();
-    
+
     // Application State
     this.directives = [
       { id: 1, text: "Calibrate suit repulsor arrays", completed: false },
@@ -20,7 +20,7 @@ class FridayApp {
       { id: 3, text: "Verify Malibu mansion perimeter defense", completed: false }
     ];
     this.aiProviderReady = false;
-    
+
     // System Telemetry State
     this.telemetry = {
       suitIntegrity: 100,
@@ -303,7 +303,7 @@ class FridayApp {
       const x = i * step;
       const amplitude = ((freqData[i] - 128) / 128) * (h * 0.42);
       const y = midY - amplitude;
-      
+
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -530,159 +530,165 @@ class FridayApp {
   }
 
   async generateAssistantResponse(clean, original) {
-    // 0. Vision / Screen Inspection
-    const isVisionIntent = clean.includes('inspect') || 
-                           clean.includes('screen') || 
-                           clean.includes('display') || 
-                           clean.includes('look at') || 
-                           clean.includes('what do you see') || 
-                           clean.includes('read my screen') || 
-                           clean.includes('analyze') && (clean.includes('this') || clean.includes('screen')) ||
-                           clean.includes('check my screen') ||
-                           clean.includes('vision');
+    // 0. Build conversation context for all AI calls
+    const context = await memoryStore.buildConversationContext(4);
 
-    if (isVisionIntent) {
-      if (!this.visionEngine.isSharing) {
-        const btnShareScreen = document.getElementById('btnShareScreen');
-        const started = await this.visionEngine.startScreenShare();
-        if (!started) {
-          return "I don't have access to your screen yet, Boss. Please click the 👁️ Share Screen button in the top bar.";
-        }
-        if (btnShareScreen) btnShareScreen.classList.add('active');
-      }
-      return await this.visionEngine.analyzeScreen(original);
-    }
-
-    // 0b. Memory recall
-    if (clean.includes('what did we') || clean.includes('what were we') ||
-        clean.includes('remember when') || clean.includes('recall') ||
-        clean.includes('our last conversation') || clean.includes('search memory')) {
-      const query = clean.replace(/^(what did we|what were we|remember when|recall|search memory for)\s*/i, '').trim();
-      const memories = await memoryStore.searchMemory(query || clean);
-      if (memories.length > 0) {
-        const summary = memories.slice(-5).map(m => `${m.role === 'user' ? 'You' : 'I'}: ${m.text}`).join('\n');
-        try {
-          const aiSummary = await this.fetchGroqResponse(
-            `Summarize these past conversation fragments for the user in 1-2 sentences (address them as 'Boss'): \n${summary}`
-          );
-          if (aiSummary && aiSummary.type === 'text') return aiSummary.content;
-        } catch (e) {
-          console.warn("Memory summary failed:", e);
-        }
-        
-        return `From my memory archives, Boss: ${memories[memories.length - 1].text}`;
-      }
-      return "I don't have any matching records in my memory archives for that query, Boss.";
-    }
-
-    // 1. PRIMARY: Fast Groq AI Intelligence with Tool Calling
     try {
       console.log("⚡ Querying Groq AI for:", original);
-      // Build conversation context from memory
-      const context = await memoryStore.buildConversationContext(4);
+      // Conversation context is already built above
       const promptWithContext = context
         ? `Previous context:\n${context}\n\nCurrent request: "${original}"`
         : original;
-      
-      const aiResponse = await this.fetchGroqResponse(promptWithContext, true);
-      
-      if (aiResponse) {
-        if (aiResponse.type === 'tool_calls') {
-          console.log("⚡ Groq initiated tool call:", aiResponse.calls);
-          const call = aiResponse.calls[0];
-          const args = JSON.parse(call.function.arguments);
-          
-          if (call.function.name === 'open_desktop_app') {
-            await osBridge.openDesktopApp(args.appName);
-            return `Right away, Boss. Launching ${args.appName} on your Windows desktop.`;
-          } else if (call.function.name === 'search_web_app') {
-            const allowedApps = ['youtube', 'google', 'instagram', 'spotify'];
-            if (!allowedApps.includes(args.targetApp)) {
-               return `I'm sorry Boss, but ${args.targetApp} is not a supported web application.`;
-            }
-            // Only auto-play if the intent was explicitly to PLAY media
-            if ((args.targetApp === 'youtube' || args.targetApp === 'spotify') && args.searchQuery && args.action === 'play') {
+
+      let currentMessages = [
+        { role: 'user', content: promptWithContext }
+      ];
+      let iteration = 0;
+
+      while (iteration < 5) {
+        iteration++;
+        const aiResponse = await this.fetchGroqResponse(currentMessages, true);
+
+        if (aiResponse) {
+          if (aiResponse.type === 'tool_calls') {
+            console.log(`⚡ Groq initiated ${aiResponse.calls.length} tool call(s) (Iteration ${iteration}):`, aiResponse.calls);
+            
+            // Fix: API requires content field (even if empty) for tool_calls
+            currentMessages.push({ role: 'assistant', content: "", tool_calls: aiResponse.calls });
+
+            for (const call of aiResponse.calls) {
+              const args = JSON.parse(call.function.arguments || "{}");
+              let toolResult = "";
+              
               try {
-                const res = await fetch('/api/play-media', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ platform: args.targetApp, query: args.searchQuery })
-                });
-                if (res.ok) return `Auto-playing your request on ${args.targetApp}, Boss.`;
-              } catch(e) {}
+                if (call.function.name === 'open_desktop_app') {
+                  await osBridge.openDesktopApp(args.appName);
+                  toolResult = `Right away, Boss. Launching ${args.appName} on your Windows desktop.`;
+                } else if (call.function.name === 'search_web_app') {
+                  const allowedApps = ['youtube', 'google', 'instagram', 'spotify'];
+                  if (!allowedApps.includes(args.targetApp)) {
+                    toolResult = `I'm sorry Boss, but ${args.targetApp} is not a supported web application.`;
+                  } else {
+                    let handled = false;
+                    if ((args.targetApp === 'youtube' || args.targetApp === 'spotify') && args.searchQuery && args.action === 'play') {
+                      try {
+                        const res = await fetch('/api/play-media', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ platform: args.targetApp, query: args.searchQuery })
+                        });
+                        if (res.ok) {
+                          toolResult = `Auto-playing your request on ${args.targetApp}, Boss.`;
+                          handled = true;
+                        }
+                      } catch (e) { }
+                    }
+                    if (!handled) {
+                      let url = '';
+                      if (args.targetApp === 'youtube') url = args.searchQuery ? `https://www.youtube.com/results?search_query=${encodeURIComponent(args.searchQuery)}` : 'https://www.youtube.com/';
+                      else if (args.targetApp === 'google') url = args.searchQuery ? `https://www.google.com/search?q=${encodeURIComponent(args.searchQuery)}` : 'https://www.google.com/';
+                      else url = `https://www.${args.targetApp}.com/`;
+                      await osBridge.openWebApp(url);
+                      toolResult = `Opening ${args.targetApp}${args.searchQuery ? " to search for " + args.searchQuery : ""}, Boss.`;
+                    }
+                  }
+                } else if (call.function.name === 'change_system_volume') {
+                  const res = await fetch('/api/system-volume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(args)
+                  });
+                  if (!res.ok) throw new Error("Endpoint failed");
+                  toolResult = `Adjusting system volume, Boss.`;
+                } else if (call.function.name === 'fetch_system_status') {
+                  const statsRes = await fetch('/api/system-stats');
+                  const stats = await statsRes.json();
+                  toolResult = `Systems are nominal, Boss. CPU load is at ${stats.cpuUsagePercent} percent, and memory usage is at ${stats.memUsagePercent} percent.`;
+                } else if (call.function.name === 'control_media') {
+                  await fetch('/api/media-control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(args)
+                  });
+                  toolResult = `Executing media control, Boss.`;
+                } else if (call.function.name === 'remember_fact') {
+                  await memoryStore.saveFact(args.key, args.value);
+                  toolResult = `I've successfully committed that to my long-term memory, Boss.`;
+                } else if (call.function.name === 'search_web_summary') {
+                  this.appendChatMessage('friday', `Accessing the global network for: ${args.url}`);
+                  const scrapeRes = await fetch('/api/web-scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: args.url })
+                  });
+                  const scrapeData = await scrapeRes.json();
+                  if (scrapeData.success) {
+                    const summaryPrompt = `Based on this webpage content: "${scrapeData.text}". Summarize the answer in 2 short sentences. Address me as Boss.`;
+                    const summaryRes = await this.fetchGroqResponse(summaryPrompt, false);
+                    toolResult = (summaryRes && summaryRes.type === 'text') ? summaryRes.content : `I wasn't able to extract any useful data, Boss.`;
+                  } else {
+                    toolResult = `I wasn't able to extract any useful data from that webpage, Boss.`;
+                  }
+                } else if (call.function.name === 'analyze_screen') {
+                  if (!this.visionEngine.isSharing) {
+                    const btnShareScreen = document.getElementById('btnShareScreen');
+                    const started = await this.visionEngine.startScreenShare();
+                    if (!started) {
+                      toolResult = "I don't have access to your screen yet, Boss. Please click the 👁️ Share Screen button in the top bar.";
+                    } else {
+                      if (btnShareScreen) btnShareScreen.classList.add('active');
+                      toolResult = await this.visionEngine.analyzeScreen(args.query);
+                    }
+                  } else {
+                    toolResult = await this.visionEngine.analyzeScreen(args.query);
+                  }
+                } else if (call.function.name === 'search_local_files') {
+                  const searchRes = await osBridge.searchFiles(args.query);
+                  if (searchRes.success && searchRes.files?.length > 0) {
+                    const fileList = searchRes.files.map(f => f.name).join(', ');
+                    toolResult = `I found ${searchRes.count} matching files, Boss: ${fileList}.`;
+                  } else {
+                    toolResult = `I searched your system for "${args.query}", but found no matching files, Boss.`;
+                  }
+                } else if (call.function.name === 'create_document') {
+                  const fetchFn = (prompt) => {
+                    return this.fetchGroqResponse(prompt, false, true).then(res => res?.content || '');
+                  };
+                  toolResult = await osBridge.createDocument(args.topic, args.originalRequest, fetchFn);
+                } else if (call.function.name === 'search_conversation_memory') {
+                  const memories = await memoryStore.searchMemory(args.query);
+                  if (memories.length > 0) {
+                    const summary = memories.slice(-5).map(m => `${m.role === 'user' ? 'You' : 'I'}: ${m.text}`).join('\n');
+                    try {
+                      const aiSummary = await this.fetchGroqResponse(
+                        `Summarize these past conversation fragments for the user in 1-2 sentences (address them as 'Boss'): \n${summary}`
+                      );
+                      if (aiSummary && aiSummary.type === 'text') toolResult = aiSummary.content;
+                      else toolResult = `From my memory archives, Boss: ${memories[memories.length - 1].text}`;
+                    } catch (e) {
+                      toolResult = `From my memory archives, Boss: ${memories[memories.length - 1].text}`;
+                    }
+                  } else {
+                    toolResult = "I don't have any matching records in my memory archives for that query, Boss.";
+                  }
+                } else {
+                  toolResult = `Unknown tool: ${call.function.name}`;
+                }
+              } catch (err) {
+                toolResult = `Error executing tool: ${err.message}`;
+              }
+              
+              currentMessages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: toolResult });
             }
-            // Fallback for search intent, non-media, or empty queries
-            let url = '';
-            if (args.targetApp === 'youtube') {
-              url = args.searchQuery ? `https://www.youtube.com/results?search_query=${encodeURIComponent(args.searchQuery)}` : 'https://www.youtube.com/';
-            } else if (args.targetApp === 'google') {
-              url = args.searchQuery ? `https://www.google.com/search?q=${encodeURIComponent(args.searchQuery)}` : 'https://www.google.com/';
-            } else {
-              url = `https://www.${args.targetApp}.com/`;
-            }
-            await osBridge.openWebApp(url);
-            return `Opening ${args.targetApp}${args.searchQuery ? " to search for " + args.searchQuery : ""}, Boss.`;
-          } else if (call.function.name === 'change_system_volume') {
-             try {
-               const res = await fetch('/api/system-volume', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify(args)
-               });
-               if (!res.ok) throw new Error("Endpoint failed");
-               return `Adjusting system volume, Boss.`;
-             } catch(e) {
-               return `I'm unable to adjust the volume right now, Boss.`;
-             }
-          } else if (call.function.name === 'fetch_system_status') {
-             try {
-               const statsRes = await fetch('/api/system-stats');
-               const stats = await statsRes.json();
-               return `Systems are nominal, Boss. CPU load is at ${stats.cpuUsagePercent} percent, and memory usage is at ${stats.memUsagePercent} percent.`;
-             } catch(e) {
-               return `I'm unable to connect to the telemetry sensors right now, Boss.`;
-             }
-          } else if (call.function.name === 'control_media') {
-             try {
-               await fetch('/api/media-control', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify(args)
-               });
-             } catch(e) {}
-             return `Executing media control, Boss.`;
-          } else if (call.function.name === 'remember_fact') {
-             try {
-               await memoryStore.saveFact(args.key, args.value);
-               return `I've successfully committed that to my long-term memory, Boss.`;
-             } catch(e) {
-               return `Memory core failed to write, Boss.`;
-             }
-          } else if (call.function.name === 'search_web_summary') {
-             try {
-               this.appendChatMessage('friday', `Accessing the global network for: ${args.url}`);
-               const scrapeRes = await fetch('/api/web-scrape', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({ url: args.url })
-               });
-               const scrapeData = await scrapeRes.json();
-               if (scrapeData.success) {
-                 const summaryPrompt = `Based on this webpage content: "${scrapeData.text}". Summarize the answer in 2 short sentences. Address me as Boss.`;
-                 const summaryRes = await this.fetchGroqResponse(summaryPrompt, false);
-                 if (summaryRes && summaryRes.type === 'text') return summaryRes.content;
-               }
-             } catch(e) {}
-             return `I wasn't able to extract any useful data from that webpage, Boss.`;
+          } else if (aiResponse.type === 'text') {
+            return aiResponse.content;
           }
-        } else if (aiResponse.type === 'text') {
-          // Conversational Fallback
-          return aiResponse.content;
+        } else {
+          break;
         }
       }
     } catch (e) {
       console.error("Groq AI error details:", e);
-      // Fall through to local fallback flow
     }
 
     // 4. Math Calculations
@@ -713,7 +719,7 @@ class FridayApp {
         const cleanExtract = data.extract.split('. ').slice(0, 2).join('. ') + '.';
         return `According to my knowledge archives, Boss: ${cleanExtract}`;
       }
-    } catch (e) {}
+    } catch (e) { }
     return null;
   }
 
@@ -736,27 +742,38 @@ class FridayApp {
           return Number.isInteger(val) ? val.toLocaleString() : val.toFixed(2);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     return null;
   }
 
-  async fetchGroqResponse(userPrompt, enableTools = false) {
-    let factsText = "";
-    try {
-      const facts = await memoryStore.getAllFacts();
-      if (facts && facts.length > 0) {
-        factsText = "\nHere are some permanent facts you know about the user:\n" + facts.map(f => `- ${f.key}: ${f.value}`).join('\n');
-      }
-    } catch(e) {}
+  async fetchGroqResponse(userPromptOrMessages, enableTools = false, isLongForm = false) {
+    let messages = [];
 
-    const promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Answer naturally, concisely, and punchily in 1 to 2 short sentences.${factsText}`;
+    if (Array.isArray(userPromptOrMessages)) {
+      messages = userPromptOrMessages;
+    } else {
+      let factsText = "";
+      try {
+        const facts = await memoryStore.getAllFacts();
+        if (facts && facts.length > 0) {
+          factsText = "\nHere are some permanent facts you know about the user:\n" + facts.map(f => `- ${f.key}: ${f.value}`).join('\n');
+        }
+      } catch (e) { }
+
+      let promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Your verbal responses must be natural, concise, and punchy in 1 to 2 short sentences. However, you have tools at your disposal to create long-form documents, analyze screens, etc. Do not hesitate to use tools like create_document if the user asks for a document or essay.${factsText}`;
+      if (isLongForm) {
+        promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's intelligent AI assistant. Write comprehensive, well-structured, and highly detailed long-form content as requested by the user. Do not arbitrarily limit your length to 1-2 sentences. Do not output internal <think> or reasoning tags.${factsText}`;
+      }
+
+      messages = [
+        { role: 'system', content: promptWithPersonality },
+        { role: 'user', content: userPromptOrMessages }
+      ];
+    }
 
     const payload = {
-      messages: [
-        { role: 'system', content: promptWithPersonality },
-        { role: 'user', content: userPrompt }
-      ],
-      max_tokens: 150,
+      messages: messages,
+      max_tokens: isLongForm ? 4000 : 1500,
       temperature: 0.6
     };
 
@@ -861,6 +878,63 @@ class FridayApp {
               required: ["key", "value"]
             }
           }
+        },
+        {
+          type: "function",
+          function: {
+            name: "analyze_screen",
+            description: "Takes a snapshot of the user's screen and analyzes it. Call this when the user asks what is on their screen, asks you to look at something, or asks you to read their screen.",
+            parameters: {
+              type: "object",
+              properties: {
+                query: { type: "string", description: "The specific question the user is asking about their screen." }
+              },
+              required: ["query"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "search_local_files",
+            description: "Searches the user's local Windows file system for files matching a query. Call this when the user asks to find, search for, or locate files.",
+            parameters: {
+              type: "object",
+              properties: {
+                query: { type: "string", description: "The search query (e.g. 'resume', 'budget report')." }
+              },
+              required: ["query"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "create_document",
+            description: "Drafts a long-form document or essay and saves it as a .docx file on the desktop. Call this when the user asks to write an essay, draft a paper, or create a document.",
+            parameters: {
+              type: "object",
+              properties: {
+                topic: { type: "string", description: "The core topic of the document." },
+                originalRequest: { type: "string", description: "The exact, full original request from the user (e.g. 'write a 200 word sarcastic essay on AI')." }
+              },
+              required: ["topic", "originalRequest"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "search_conversation_memory",
+            description: "Searches through past conversation history to recall what was discussed. Call this when the user asks 'what did we talk about', 'do you remember', or 'search memory'.",
+            parameters: {
+              type: "object",
+              properties: {
+                query: { type: "string", description: "The subject to search for in past memories." }
+              },
+              required: ["query"]
+            }
+          }
         }
       ];
     }
@@ -880,12 +954,12 @@ class FridayApp {
         throw new Error(`Groq API HTTP ${res.status} - ${errText}`);
       }
       const data = await res.json();
-      
+
       const message = data.choices?.[0]?.message;
       if (message?.tool_calls) {
         return { type: 'tool_calls', calls: message.tool_calls };
       }
-      
+
       const reply = message?.content;
       if (!reply || reply.trim().length === 0) throw new Error(`Groq API empty response`);
       console.log(`✅ Groq responded quickly!`);

@@ -74,19 +74,13 @@ function findAppShortcut(appName) {
 
 function launchInInteractiveSession(target) {
   return new Promise((resolve) => {
-    let cmd, args;
-    if (target.startsWith('http://') || target.startsWith('https://')) {
-      cmd = 'explorer.exe';
-      args = [target];
-    } else {
-      cmd = 'powershell.exe';
-      args = ['-Command', `Start-Process '${target.replace(/'/g, "''")}'`];
-    }
+    const cmd = 'powershell.exe';
+    const args = ['-Command', `Start-Process '${target.replace(/'/g, "''")}'`];
     
-    execFile(cmd, args, { timeout: 5000 }, (err) => {
+    execFile(cmd, args, { timeout: 10000 }, (err) => {
       if (err) {
         console.warn(`  ❌ Launch failed for "${target}":`, err.message);
-        exec(`start "" "${target}"`, (err2) => {
+        exec(`start "" "${target.replace(/"/g, '""')}"`, (err2) => {
           resolve(!err2);
         });
       } else {
@@ -151,7 +145,7 @@ export default function fridayOSPlugin() {
       server.middlewares.use('/api/save-file', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         try {
-          const { fileName, content, targetFolder = 'Desktop' } = await parseBody(req);
+          const { fileName, content, targetFolder = 'Desktop', format = 'txt' } = await parseBody(req);
           if (!fileName || !content) { res.statusCode = 400; res.end(JSON.stringify({ error: 'fileName and content required' })); return; }
 
           let dir = targetFolder.toLowerCase() === 'documents' ? documentsDir : desktopDir;
@@ -160,9 +154,38 @@ export default function fridayOSPlugin() {
           }
 
           const safe = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-          const fullPath = path.join(dir, (safe.endsWith('.txt') || safe.endsWith('.md')) ? safe : safe + '.txt');
+          let fullPath = path.join(dir, safe);
 
-          fs.writeFileSync(fullPath, content, 'utf8');
+          if (format === 'docx') {
+            if (!fullPath.endsWith('.docx')) fullPath += '.docx';
+            const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
+            
+            const paragraphs = content.split('\n').filter(l => l.trim().length > 0).map(line => {
+              if (line.startsWith('# ')) return new Paragraph({ text: line.replace('# ', ''), heading: HeadingLevel.HEADING_1 });
+              if (line.startsWith('## ')) return new Paragraph({ text: line.replace('## ', ''), heading: HeadingLevel.HEADING_2 });
+              if (line.startsWith('### ')) return new Paragraph({ text: line.replace('### ', ''), heading: HeadingLevel.HEADING_3 });
+              
+              // Handle bolding **text** simply
+              const parts = line.split(/(\*\*.*?\*\*)/g);
+              const children = parts.map(part => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                  return new TextRun({ text: part.slice(2, -2), bold: true });
+                }
+                return new TextRun(part);
+              });
+              return new Paragraph({ children });
+            });
+            
+            const doc = new Document({
+              sections: [{ properties: {}, children: paragraphs }]
+            });
+            const buffer = await Packer.toBuffer(doc);
+            fs.writeFileSync(fullPath, buffer);
+          } else {
+            if (!fullPath.endsWith('.txt') && !fullPath.endsWith('.md')) fullPath += '.txt';
+            fs.writeFileSync(fullPath, content, 'utf8');
+          }
+
           console.log(`💾 Saved: ${fullPath}`);
           launchInInteractiveSession(fullPath);
 

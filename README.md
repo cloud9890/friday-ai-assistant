@@ -9,50 +9,53 @@ A futuristic, high-tech tactical AI desktop assistant inspired by Tony Stark's *
 - **Always-On Passive Wake Word Activation** (*"Friday"* / *"Hey Friday"*)
 - **Voice Intelligence powered by ElevenLabs & Groq AI**
 - **Autonomous OS & Web Automation** (Open desktop apps, search YouTube/Google with filters, download essays, control system volume)
-- **Iron Man Arc Reactor Canvas Visualizer & HUD Sound FX (Web Audio API Synthesizer)**
 - **Real-Time Windows Hardware Telemetry** (CPU, RAM) & **Media Controls** (Play/Pause)
 - **Long-Term Persona Memory** (IndexedDB powered permanent facts)
 
 ---
 
-## 🚧 Development Roadmap (In Progress)
+## 🛠️ Development Roadmap (In Progress)
 - [x] Passive background wake-word listener (*"Friday"*)
 - [x] ElevenLabs voice synthesis with Web Speech fallback
-- [x] Groq Conversational Intelligence (Automated Tool Prober)
-- [x] Web app navigation (YouTube latest video filters, Instagram, Spotify, Google Maps, GitHub)
-- [x] Automatic essay generator & desktop file saver
+- [x] Multi-Turn Agentic ReAct Loop (Groq OpenAI Tool Calling)
+- [x] Web app navigation (YouTube, Google) via PowerShell OS hooks
+- [x] Automatic long-form document generator (.docx)
 - [x] Advanced System volume control & Media playback control
 - [x] Real-time system telemetry (CPU/RAM sensors)
-- [x] Autonomous web scraping (background content summarizer)
 - [x] Long-Term Persona Memory (IndexedDB)
+- [x] Native local file search
 - [ ] Computer vision screen inspection via multimodal models
 - [ ] Multi-window workspace management & macro scripts
 - [ ] Cross-platform Linux/macOS support
 
 ---
 
-## 🚀 Key Features
+## ⚡ Key Features
 
 ### 1. 🎙️ Passive Voice Activation
 - Runs a continuous, non-intrusive wake-word listener in the background.
 - Activates and records when you say **"Friday"** or **"Hey Friday"**.
 - Consistent **ElevenLabs Female Irish Tactical Voice** (with automatic Web Speech fallback).
 
-### 2. ⚡ Autonomous OS & Web Control
+### 2. 🧠 Agentic ReAct Tool Calling (NLU)
+- Fully decoupled NLU using Groq's high-speed reasoning models.
+- **Multi-Step Execution**: Friday can chain multiple tools organically. For example, she can search the web, store the key facts in memory, and generate a `.docx` summary document—all in a single thought loop.
+- **Available Native Tools**:
+  - `open_desktop_app`, `search_web_app`, `change_system_volume`, `fetch_system_status`, `search_local_files`, `create_document`, `remember_fact`, `search_conversation_memory`, `analyze_screen`
+
+### 3. 🌐 Autonomous OS & Web Control
 - **Desktop Apps**: Automatically launches Windows desktop apps (`Notepad`, `Calculator`, `VS Code`, `Task Manager`).
-- **Web Navigation & Search**: 
-  - *"Friday, search Google for quantum mechanics"*
-  - *"Friday, play AC DC on YouTube"* (Triggers the Auto-Play scraper)
+- **Web Navigation**: Opens and searches browsers seamlessly.
 - **Media & System Telemetry**: 
   - *"Friday, pause the music"* (Hardware-level Virtual Key injection)
   - *"Friday, how are our systems holding up?"* (Reads real-time Windows RAM/CPU usage)
 - **System Audio**: Control master volume (*"Friday, volume up"*, *"Friday, mute audio"*).
 
-### 3. 🧠 Long-Term Persona Memory
+### 4. 💾 Long-Term Persona Memory
 - Give her permanent facts: *"Friday, remember that my favorite color is crimson red."*
 - She stores this in a local IndexedDB memory core and automatically injects it into her system prompt for all future conversations.
 
-### 4. 🛡️ Stark Tactical HUD & Visualizer
+### 5. 🎯 Stark Tactical HUD & Visualizer
 - Dynamic animated Canvas **Arc Reactor** with audio waveform reactivity.
 - Stark OS Sound FX synthesized in real time with Web Audio API.
 - Live directives & task manager with audio confirmation.
