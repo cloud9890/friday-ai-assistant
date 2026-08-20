@@ -544,8 +544,9 @@ class FridayApp {
         { role: 'user', content: promptWithContext }
       ];
       let iteration = 0;
+      const MAX_ITERATIONS = 10;
 
-      while (iteration < 5) {
+      while (iteration < MAX_ITERATIONS) {
         iteration++;
         const aiResponse = await this.fetchGroqResponse(currentMessages, true);
 
@@ -671,6 +672,13 @@ class FridayApp {
                   } else {
                     toolResult = "I don't have any matching records in my memory archives for that query, Boss.";
                   }
+                } else if (call.function.name === 'inspect_and_interact_web') {
+                  const res = await osBridge.interactWebAgent(args.action, args.url, args.elementId, args.text);
+                  if (res.success) {
+                    toolResult = `Web Agent action '${args.action}' completed. Current simplified DOM:\n${res.dom}`;
+                  } else {
+                    toolResult = `Web Agent error: ${res.error}`;
+                  }
                 } else {
                   toolResult = `Unknown tool: ${call.function.name}`;
                 }
@@ -686,6 +694,11 @@ class FridayApp {
         } else {
           break;
         }
+      }
+
+      // If we exit the loop because of MAX_ITERATIONS, return a fallback instead of proceeding
+      if (iteration >= MAX_ITERATIONS) {
+        return "I've hit my maximum iteration limit for this task, Boss. I had to abort.";
       }
     } catch (e) {
       console.error("Groq AI error details:", e);
@@ -760,7 +773,12 @@ class FridayApp {
         }
       } catch (e) { }
 
-      let promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Your verbal responses must be natural, concise, and punchy in 1 to 2 short sentences. However, you have tools at your disposal to create long-form documents, analyze screens, etc. Do not hesitate to use tools like create_document if the user asks for a document or essay.${factsText}`;
+      let promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Your verbal responses must be natural, concise, and punchy in 1 to 2 short sentences. When summarizing multiple actions or tool executions, synthesize them into a single fluid sentence (e.g. "I've opened Calendar and launched Notepad for you, Boss.") rather than listing them separately. 
+CRITICAL RULES:
+1. NEVER use emojis, bullet points, or markdown formatting under ANY circumstances, as your response will be spoken aloud via TTS.
+2. NEVER use generic AI assistant filler phrases like "Let me know if you need anything else", "How can I help you?", or "Is there anything else I can do?". Be concise and direct, like a tactical AI.
+3. When using the inspect_and_interact_web tool, you can chain multiple tool calls. If you navigate to a page and receive the DOM, evaluate the DOM to find the specific element IDs you need, and make another tool call to click or type into them until the objective is complete.
+However, you have tools at your disposal to create long-form documents, analyze screens, etc. Do not hesitate to use tools like create_document if the user asks for a document or essay.${factsText}`;
       if (isLongForm) {
         promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's intelligent AI assistant. Write comprehensive, well-structured, and highly detailed long-form content as requested by the user. Do not arbitrarily limit your length to 1-2 sentences. Do not output internal <think> or reasoning tags.${factsText}`;
       }
@@ -773,7 +791,9 @@ class FridayApp {
 
     const payload = {
       messages: messages,
-      max_tokens: isLongForm ? 4000 : 1500,
+      // Provide enough max_tokens for the model to generate full JSON arguments or reasoning, 
+      // but low enough to avoid the 8k TPM limit on the free tier.
+      max_tokens: isLongForm ? 4000 : 800,
       temperature: 0.6
     };
 
@@ -935,6 +955,23 @@ class FridayApp {
               required: ["query"]
             }
           }
+        },
+        {
+          type: "function",
+          function: {
+            name: "inspect_and_interact_web",
+            description: "An autonomous browser agent. Call this to navigate to a URL, read its content, click elements, or type into inputs. The response will contain the updated webpage state.",
+            parameters: {
+              type: "object",
+              properties: {
+                action: { type: "string", enum: ["navigate", "click", "type", "getDOM"], description: "The action to perform." },
+                url: { type: "string", description: "The URL to navigate to (required for 'navigate')." },
+                elementId: { type: "string", description: "The ID of the element to interact with (required for 'click' and 'type')." },
+                text: { type: "string", description: "The text to type (required for 'type')." }
+              },
+              required: ["action"]
+            }
+          }
         }
       ];
     }
@@ -961,7 +998,13 @@ class FridayApp {
       }
 
       const reply = message?.content;
-      if (!reply || reply.trim().length === 0) throw new Error(`Groq API empty response`);
+      if (!reply || reply.trim().length === 0) {
+        if (enableTools) {
+          console.log(`✅ Groq returned an empty text response after tools. Falling back to default success message.`);
+          return { type: 'text', content: "Action completed successfully, Boss." };
+        }
+        throw new Error(`Groq API empty response`);
+      }
       console.log(`✅ Groq responded quickly!`);
       return { type: 'text', content: reply.trim() };
     } catch (e) {

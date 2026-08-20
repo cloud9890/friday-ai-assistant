@@ -251,6 +251,35 @@ export default function fridayOSPlugin() {
         res.end(JSON.stringify({ success: true, action }));
       });
 
+      // --- WEB AGENT ---
+      server.middlewares.use('/api/web-agent', async (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+        try {
+          const { action, url, elementId, text } = await parseBody(req);
+          
+          // Import dynamically since web-agent is ESM
+          const { navigate, click, type, getSimplifiedDOM } = await import('./web-agent.js');
+          
+          let result = "";
+          if (action === 'navigate') {
+            result = await navigate(url);
+          } else if (action === 'click') {
+            result = await click(elementId);
+          } else if (action === 'type') {
+            result = await type(elementId, text);
+          } else if (action === 'getDOM') {
+            result = await getSimplifiedDOM();
+          }
+          
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify({ success: true, dom: result }));
+        } catch (err) {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+
       // --- SYSTEM STATS ---
       server.middlewares.use('/api/system-stats', (req, res) => {
         const totalMem = os.totalmem();

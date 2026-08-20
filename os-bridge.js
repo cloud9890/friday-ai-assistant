@@ -57,6 +57,25 @@ export class OSBridge {
   }
 
   /* ------------------------------------------------------------------------
+     5. WEB AGENT INTERACTION
+     ------------------------------------------------------------------------ */
+  async interactWebAgent(action, url = null, elementId = null, text = null) {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/web-agent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, url, elementId, text }),
+        signal: AbortSignal.timeout(15000)
+      });
+      const data = await res.json();
+      return data;
+    } catch (e) {
+      console.warn('Web agent error:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /* ------------------------------------------------------------------------
      2. LAUNCH DESKTOP APP (Vite Embedded Plugin)
      ------------------------------------------------------------------------ */
   async openDesktopApp(appName) {
