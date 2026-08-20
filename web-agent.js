@@ -61,6 +61,21 @@ export async function type(elementId, text) {
   }
 }
 
+export async function scroll(direction = 'down') {
+  if (!page) return "No active browser.";
+  try {
+    if (direction === 'down') {
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.8));
+    } else {
+      await page.evaluate(() => window.scrollBy(0, -window.innerHeight * 0.8));
+    }
+    await new Promise(r => setTimeout(r, 1500));
+    return await getSimplifiedDOM();
+  } catch (err) {
+    return `Error scrolling: ${err.message}`;
+  }
+}
+
 export async function getSimplifiedDOM(retries = 3) {
   if (!page) return "No active browser.";
 
@@ -79,30 +94,83 @@ export async function getSimplifiedDOM(retries = 3) {
       });
 
       function parseNode(node) {
-        if (node.nodeType === Node.TEXT_NODE) return node.textContent.trim();
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent.replace(/\\s+/g, ' ');
+          return text === ' ' ? ' ' : text.trim() ? text : '';
+        }
         if (node.nodeType === Node.ELEMENT_NODE) {
           const style = window.getComputedStyle(node);
-          if (style.display === 'none' || style.visibility === 'hidden') return '';
-          if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.tagName === 'NOSCRIPT' || node.tagName === 'SVG') return '';
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return '';
+          if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IFRAME', 'CANVAS'].includes(node.tagName)) return '';
 
-          let inner = Array.from(node.childNodes).map(parseNode).filter(t => t).join(' ');
+          // Viewport culling: skip elements completely outside the viewport
+          const rect = node.getBoundingClientRect();
+          const inViewport = (
+              rect.bottom >= 0 &&
+              rect.right >= 0 &&
+              rect.top <= (window.innerHeight || document.documentElement.clientHeight) &&
+              rect.left <= (window.innerWidth || document.documentElement.clientWidth)
+          );
+          if (!inViewport && rect.width > 0 && rect.height > 0) return '';
+
+          let inner = Array.from(node.childNodes).map(parseNode).join('');
+          
+          const isBlock = ['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'SECTION', 'ARTICLE', 'MAIN', 'NAV', 'HEADER', 'FOOTER'].includes(node.tagName);
+          if (isBlock) inner = `\\n${inner.trim()}\\n`;
+
           const agentId = node.getAttribute('data-agent-id');
           if (agentId) {
-            let label = inner;
+            let label = inner.replace(/\\n/g, ' ').trim();
             if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
-              label = `[INPUT: ${node.placeholder || node.name || 'text'}]`;
+              label = node.getAttribute('aria-label') || (node.labels && node.labels.length > 0 ? node.labels[0].innerText : '') || node.placeholder || node.name || 'text input';
+              return `\\n- [INPUT] "${label}" (ID: ${agentId})\\n`;
+            } else if (node.tagName === 'SELECT') {
+              label = node.getAttribute('aria-label') || (node.labels && node.labels.length > 0 ? node.labels[0].innerText : '') || node.name || 'select';
+              const selectedOption = node.options[node.selectedIndex];
+              const selectedText = selectedOption ? selectedOption.text : '';
+              return `\\n- [SELECT] "${label}" [Selected: ${selectedText}] (ID: ${agentId})\\n`;
             } else if (node.tagName === 'BUTTON' || node.getAttribute('role') === 'button') {
-              label = `[BUTTON: ${inner || node.title || node.value || 'submit'}]`;
+              label = label || node.title || node.value || 'button';
+              return `\\n- [BUTTON] "${label}" (ID: ${agentId})\\n`;
             } else if (node.tagName === 'A') {
-              label = `[LINK: ${inner || node.title || node.href}]`;
+              let cleanUrl = '';
+              if (node.href) {
+                try {
+                  const urlObj = new URL(node.href);
+                  cleanUrl = urlObj.origin + urlObj.pathname;
+                } catch(e) { cleanUrl = node.href; }
+              }
+              label = label || node.title || cleanUrl || 'link';
+              return `\\n- [LINK] "${label}" (ID: ${agentId})\\n`;
             }
-            return ` {ID: ${agentId}, ${label}} `;
           }
+          
+          if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(node.tagName) && inner.trim()) {
+            const level = node.tagName.charAt(1);
+            return `\\n${'#'.repeat(parseInt(level))} ${inner.replace(/\\n/g, ' ').trim()}\\n`;
+          }
+          if (node.tagName === 'LI' && inner.trim()) {
+            return `\\n- ${inner.replace(/\\n/g, ' ').trim()}\\n`;
+          }
+          if (node.tagName === 'P' && inner.trim()) {
+            return `\\n${inner.trim()}\\n`;
+          }
+          
           return inner;
         }
         return '';
       }
-      return parseNode(document.body).replace(/\s+/g, ' ').trim();
+
+      let markdown = parseNode(document.body);
+      
+      // Clean up excessive newlines
+      markdown = markdown.replace(/\\n{3,}/g, '\\n\\n').trim();
+      
+      // Truncate to save tokens for local 8B models (approx 8000 chars)
+      if (markdown.length > 8000) {
+        markdown = markdown.substring(0, 8000) + '\\n...[TRUNCATED FOR LENGTH]';
+      }
+      return markdown;
     });
     
     return domSnapshot.substring(0, 8000) + (domSnapshot.length > 8000 ? "\n...[TRUNCATED]" : "");

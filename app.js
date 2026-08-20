@@ -7,11 +7,15 @@ import { VoiceEngine } from './voice-engine.js';
 import { osBridge } from './os-bridge.js';
 import { VisionEngine } from './vision-engine.js';
 import { memoryStore } from './memory-store.js';
+import { AgentEngine } from './agent-engine.js';
+import { UIManager } from './ui-manager.js';
 
 class FridayApp {
   constructor() {
     this.voiceEngine = new VoiceEngine();
     this.visionEngine = new VisionEngine();
+    this.uiManager = new UIManager();
+    this.agentEngine = new AgentEngine(this.visionEngine, this.uiManager);
 
     // Application State
     this.directives = [
@@ -48,10 +52,10 @@ class FridayApp {
 
     // Initial F.R.I.D.A.Y. greeting sound
     soundFX.playPowerUp();
-    this.verifyGroqKey();
+    this.verifyAIEngine();
   }
 
-  async verifyGroqKey() {
+  async verifyAIEngine() {
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -63,13 +67,13 @@ class FridayApp {
         signal: AbortSignal.timeout(4000)
       });
       if (res.ok) {
-        console.log("⚡ [GROQ STATUS: ONLINE & ACTIVE]");
+        console.log("⚡ [CORE AI ENGINE STATUS: ONLINE & ACTIVE]");
         this.aiProviderReady = true;
       } else {
-        console.warn(`⚠️ [GEMINI STATUS: HTTP ${res.status}] — API may have rate limits.`);
+        console.warn(`⚠️ [AI ENGINE STATUS: HTTP ${res.status}]`);
       }
     } catch (e) {
-      console.warn("⚠️ [GEMINI STATUS: UNREACHABLE]", e.message);
+      console.warn("⚠️ [AI ENGINE STATUS: UNREACHABLE]", e.message);
     }
   }
 
@@ -459,587 +463,37 @@ class FridayApp {
     if (!text) return;
 
     this.cmdInput.value = '';
-    this.appendChatMessage('user', text);
+    this.uiManager.appendChatMessage('user', text);
     soundFX.playClick();
     memoryStore.saveMessage('user', text).catch(e => console.warn('Memory save user error:', e));
 
-    // Show immediate thinking placeholder
-    const thinkingId = this.showThinkingIndicator();
-    this.updateVoiceUIStatus('speaking');
+    const thinkingId = this.uiManager.showThinkingIndicator();
+    this.uiManager.updateVoiceUIStatus('speaking');
 
     const clean = text.toLowerCase().replace(/^(friday|hey friday|ok friday|hi friday)[,\s]*/i, '').trim();
 
-    // Explicit barge-in / stop override
     if (clean === 'stop' || clean === 'quiet' || clean === 'cancel' || clean === 'shut up' || clean === 'pause') {
-      this.resolveThinkingIndicator(thinkingId, "Standing by, Boss.");
+      this.uiManager.resolveThinkingIndicator(thinkingId, "Standing by, Boss.");
       this.voiceEngine.stopSpeaking();
       return;
     }
 
     try {
-      const response = await this.generateAssistantResponse(clean, text);
-      this.resolveThinkingIndicator(thinkingId, response);
+      const response = await this.agentEngine.askFriday(clean, text);
+      this.uiManager.resolveThinkingIndicator(thinkingId, response);
       this.voiceEngine.speak(response);
       memoryStore.saveMessage('friday', response).catch(e => console.warn('Memory save assistant error:', e));
     } catch (err) {
       console.error("Assistant execution error:", err);
       const fallback = "Systems are recalibrating, Boss. I encountered a minor telemetry sync delay.";
-      this.resolveThinkingIndicator(thinkingId, fallback);
+      this.uiManager.resolveThinkingIndicator(thinkingId, fallback);
       this.voiceEngine.speak(fallback);
     }
   }
 
-  showThinkingIndicator() {
-    const id = `thinking_${Date.now()}`;
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'chat-msg msg-friday thinking';
-    msgDiv.id = id;
-
-    const authorDiv = document.createElement('div');
-    authorDiv.className = 'msg-author';
-    authorDiv.textContent = 'F.R.I.D.A.Y.';
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'msg-content';
-    contentDiv.innerHTML = `<span>Processing tactical query</span><span class="thinking-dots"><span></span><span></span><span></span></span>`;
-
-    const timeDiv = document.createElement('div');
-    timeDiv.className = 'msg-time';
-    timeDiv.textContent = 'ANALYZING...';
-
-    msgDiv.appendChild(authorDiv);
-    msgDiv.appendChild(contentDiv);
-    msgDiv.appendChild(timeDiv);
-
-    this.chatStream.appendChild(msgDiv);
-    this.chatStream.scrollTop = this.chatStream.scrollHeight;
-    return id;
-  }
-
-  resolveThinkingIndicator(id, finalResponse) {
-    const thinkingEl = document.getElementById(id);
-    if (thinkingEl) {
-      thinkingEl.className = 'chat-msg msg-friday';
-      const contentEl = thinkingEl.querySelector('.msg-content');
-      if (contentEl) contentEl.textContent = finalResponse;
-      const timeEl = thinkingEl.querySelector('.msg-time');
-      if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
-    } else {
-      this.appendChatMessage('friday', finalResponse);
-    }
-  }
-
-  async generateAssistantResponse(clean, original) {
-    // 0. Build conversation context for all AI calls
-    const context = await memoryStore.buildConversationContext(4);
-
-    try {
-      console.log("⚡ Querying Groq AI for:", original);
-      // Conversation context is already built above
-      const promptWithContext = context
-        ? `Previous context:\n${context}\n\nCurrent request: "${original}"`
-        : original;
-
-      let currentMessages = [
-        { role: 'user', content: promptWithContext }
-      ];
-      let iteration = 0;
-      const MAX_ITERATIONS = 10;
-
-      while (iteration < MAX_ITERATIONS) {
-        iteration++;
-        const aiResponse = await this.fetchGroqResponse(currentMessages, true);
-
-        if (aiResponse) {
-          if (aiResponse.type === 'tool_calls') {
-            console.log(`⚡ Groq initiated ${aiResponse.calls.length} tool call(s) (Iteration ${iteration}):`, aiResponse.calls);
-            
-            // Fix: API requires content field (even if empty) for tool_calls
-            currentMessages.push({ role: 'assistant', content: "", tool_calls: aiResponse.calls });
-
-            for (const call of aiResponse.calls) {
-              const args = JSON.parse(call.function.arguments || "{}");
-              let toolResult = "";
-              
-              try {
-                if (call.function.name === 'open_desktop_app') {
-                  await osBridge.openDesktopApp(args.appName);
-                  toolResult = `Right away, Boss. Launching ${args.appName} on your Windows desktop.`;
-                } else if (call.function.name === 'search_web_app') {
-                  const allowedApps = ['youtube', 'google', 'instagram', 'spotify'];
-                  if (!allowedApps.includes(args.targetApp)) {
-                    toolResult = `I'm sorry Boss, but ${args.targetApp} is not a supported web application.`;
-                  } else {
-                    let handled = false;
-                    if ((args.targetApp === 'youtube' || args.targetApp === 'spotify') && args.searchQuery && args.action === 'play') {
-                      try {
-                        const res = await fetch('/api/play-media', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ platform: args.targetApp, query: args.searchQuery })
-                        });
-                        if (res.ok) {
-                          toolResult = `Auto-playing your request on ${args.targetApp}, Boss.`;
-                          handled = true;
-                        }
-                      } catch (e) { }
-                    }
-                    if (!handled) {
-                      let url = '';
-                      if (args.targetApp === 'youtube') url = args.searchQuery ? `https://www.youtube.com/results?search_query=${encodeURIComponent(args.searchQuery)}` : 'https://www.youtube.com/';
-                      else if (args.targetApp === 'google') url = args.searchQuery ? `https://www.google.com/search?q=${encodeURIComponent(args.searchQuery)}` : 'https://www.google.com/';
-                      else url = `https://www.${args.targetApp}.com/`;
-                      await osBridge.openWebApp(url);
-                      toolResult = `Opening ${args.targetApp}${args.searchQuery ? " to search for " + args.searchQuery : ""}, Boss.`;
-                    }
-                  }
-                } else if (call.function.name === 'change_system_volume') {
-                  const res = await fetch('/api/system-volume', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(args)
-                  });
-                  if (!res.ok) throw new Error("Endpoint failed");
-                  toolResult = `Adjusting system volume, Boss.`;
-                } else if (call.function.name === 'fetch_system_status') {
-                  const statsRes = await fetch('/api/system-stats');
-                  const stats = await statsRes.json();
-                  toolResult = `Systems are nominal, Boss. CPU load is at ${stats.cpuUsagePercent} percent, and memory usage is at ${stats.memUsagePercent} percent.`;
-                } else if (call.function.name === 'control_media') {
-                  await fetch('/api/media-control', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(args)
-                  });
-                  toolResult = `Executing media control, Boss.`;
-                } else if (call.function.name === 'remember_fact') {
-                  await memoryStore.saveFact(args.key, args.value);
-                  toolResult = `I've successfully committed that to my long-term memory, Boss.`;
-                } else if (call.function.name === 'search_web_summary') {
-                  this.appendChatMessage('friday', `Accessing the global network for: ${args.url}`);
-                  const scrapeRes = await fetch('/api/web-scrape', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: args.url })
-                  });
-                  const scrapeData = await scrapeRes.json();
-                  if (scrapeData.success) {
-                    const summaryPrompt = `Based on this webpage content: "${scrapeData.text}". Summarize the answer in 2 short sentences. Address me as Boss.`;
-                    const summaryRes = await this.fetchGroqResponse(summaryPrompt, false);
-                    toolResult = (summaryRes && summaryRes.type === 'text') ? summaryRes.content : `I wasn't able to extract any useful data, Boss.`;
-                  } else {
-                    toolResult = `I wasn't able to extract any useful data from that webpage, Boss.`;
-                  }
-                } else if (call.function.name === 'analyze_screen') {
-                  if (!this.visionEngine.isSharing) {
-                    const btnShareScreen = document.getElementById('btnShareScreen');
-                    const started = await this.visionEngine.startScreenShare();
-                    if (!started) {
-                      toolResult = "I don't have access to your screen yet, Boss. Please click the 👁️ Share Screen button in the top bar.";
-                    } else {
-                      if (btnShareScreen) btnShareScreen.classList.add('active');
-                      toolResult = await this.visionEngine.analyzeScreen(args.query);
-                    }
-                  } else {
-                    toolResult = await this.visionEngine.analyzeScreen(args.query);
-                  }
-                } else if (call.function.name === 'search_local_files') {
-                  const searchRes = await osBridge.searchFiles(args.query);
-                  if (searchRes.success && searchRes.files?.length > 0) {
-                    const fileList = searchRes.files.map(f => f.name).join(', ');
-                    toolResult = `I found ${searchRes.count} matching files, Boss: ${fileList}.`;
-                  } else {
-                    toolResult = `I searched your system for "${args.query}", but found no matching files, Boss.`;
-                  }
-                } else if (call.function.name === 'create_document') {
-                  const fetchFn = (prompt) => {
-                    return this.fetchGroqResponse(prompt, false, true).then(res => res?.content || '');
-                  };
-                  toolResult = await osBridge.createDocument(args.topic, args.originalRequest, fetchFn);
-                } else if (call.function.name === 'search_conversation_memory') {
-                  const memories = await memoryStore.searchMemory(args.query);
-                  if (memories.length > 0) {
-                    const summary = memories.slice(-5).map(m => `${m.role === 'user' ? 'You' : 'I'}: ${m.text}`).join('\n');
-                    try {
-                      const aiSummary = await this.fetchGroqResponse(
-                        `Summarize these past conversation fragments for the user in 1-2 sentences (address them as 'Boss'): \n${summary}`
-                      );
-                      if (aiSummary && aiSummary.type === 'text') toolResult = aiSummary.content;
-                      else toolResult = `From my memory archives, Boss: ${memories[memories.length - 1].text}`;
-                    } catch (e) {
-                      toolResult = `From my memory archives, Boss: ${memories[memories.length - 1].text}`;
-                    }
-                  } else {
-                    toolResult = "I don't have any matching records in my memory archives for that query, Boss.";
-                  }
-                } else if (call.function.name === 'inspect_and_interact_web') {
-                  const res = await osBridge.interactWebAgent(args.action, args.url, args.elementId, args.text);
-                  if (res.success) {
-                    toolResult = `Web Agent action '${args.action}' completed. Current simplified DOM:\n${res.dom}`;
-                  } else {
-                    toolResult = `Web Agent error: ${res.error}`;
-                  }
-                } else {
-                  toolResult = `Unknown tool: ${call.function.name}`;
-                }
-              } catch (err) {
-                toolResult = `Error executing tool: ${err.message}`;
-              }
-              
-              currentMessages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: toolResult });
-            }
-          } else if (aiResponse.type === 'text') {
-            return aiResponse.content;
-          }
-        } else {
-          break;
-        }
-      }
-
-      // If we exit the loop because of MAX_ITERATIONS, return a fallback instead of proceeding
-      if (iteration >= MAX_ITERATIONS) {
-        return "I've hit my maximum iteration limit for this task, Boss. I had to abort.";
-      }
-    } catch (e) {
-      console.error("Groq AI error details:", e);
-    }
-
-    // 4. Math Calculations
-    const mathResult = this.evaluateMath(clean);
-    if (mathResult !== null) {
-      return `According to my calculations, Boss, the result is ${mathResult}.`;
-    }
-
-    // 5. Live Global Knowledge Engine (Wikipedia fallback)
-    const topic = clean.replace(/^(what is|who is|tell me about|explain|how does|how do|why is|where is|search for|lookup|define)\s+/i, '').replace(/(\?|\.)$/, '').trim();
-    if (topic.length > 1) {
-      const liveKnowledge = await this.fetchLiveKnowledge(topic);
-      if (liveKnowledge) {
-        return liveKnowledge;
-      }
-    }
-
-    return `I have processed your query regarding "${original}", Boss. All systems register nominal.`;
-  }
-
-  async fetchLiveKnowledge(topic) {
-    try {
-      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data && data.extract) {
-        const cleanExtract = data.extract.split('. ').slice(0, 2).join('. ') + '.';
-        return `According to my knowledge archives, Boss: ${cleanExtract}`;
-      }
-    } catch (e) { }
-    return null;
-  }
-
-  evaluateMath(exprStr) {
-    try {
-      let str = exprStr.toLowerCase()
-        .replace(/calculate|what is|how much is|solve/g, '')
-        .replace(/percent of/g, '* 0.01 *')
-        .replace(/percent/g, '* 0.01')
-        .replace(/times|multiplied by|x/g, '*')
-        .replace(/divided by|over/g, '/')
-        .replace(/plus|and/g, '+')
-        .replace(/minus|less/g, '-')
-        .trim();
-
-      const sanitized = str.replace(/[^0-9\+\-\*\/\(\)\.\s]/g, '');
-      if (sanitized.length > 0 && /[0-9]/.test(sanitized) && /[\+\-\*\/]/.test(sanitized)) {
-        const val = Function(`'use strict'; return (${sanitized})`)();
-        if (typeof val === 'number' && !isNaN(val) && isFinite(val)) {
-          return Number.isInteger(val) ? val.toLocaleString() : val.toFixed(2);
-        }
-      }
-    } catch (e) { }
-    return null;
-  }
-
-  async fetchGroqResponse(userPromptOrMessages, enableTools = false, isLongForm = false) {
-    let messages = [];
-
-    if (Array.isArray(userPromptOrMessages)) {
-      messages = userPromptOrMessages;
-    } else {
-      let factsText = "";
-      try {
-        const facts = await memoryStore.getAllFacts();
-        if (facts && facts.length > 0) {
-          factsText = "\nHere are some permanent facts you know about the user:\n" + facts.map(f => `- ${f.key}: ${f.value}`).join('\n');
-        }
-      } catch (e) { }
-
-      let promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's futuristic, intelligent, polite Irish-accented tactical AI assistant. Always address the user as 'Boss'. Your verbal responses must be natural, concise, and punchy in 1 to 2 short sentences. When summarizing multiple actions or tool executions, synthesize them into a single fluid sentence (e.g. "I've opened Calendar and launched Notepad for you, Boss.") rather than listing them separately. 
-CRITICAL RULES:
-1. NEVER use emojis, bullet points, or markdown formatting under ANY circumstances, as your response will be spoken aloud via TTS.
-2. NEVER use generic AI assistant filler phrases like "Let me know if you need anything else", "How can I help you?", or "Is there anything else I can do?". Be concise and direct, like a tactical AI.
-3. When using the inspect_and_interact_web tool, you can chain multiple tool calls. If you navigate to a page and receive the DOM, evaluate the DOM to find the specific element IDs you need, and make another tool call to click or type into them until the objective is complete.
-However, you have tools at your disposal to create long-form documents, analyze screens, etc. Do not hesitate to use tools like create_document if the user asks for a document or essay.${factsText}`;
-      if (isLongForm) {
-        promptWithPersonality = `You are F.R.I.D.A.Y., Tony Stark's intelligent AI assistant. Write comprehensive, well-structured, and highly detailed long-form content as requested by the user. Do not arbitrarily limit your length to 1-2 sentences. Do not output internal <think> or reasoning tags.${factsText}`;
-      }
-
-      messages = [
-        { role: 'system', content: promptWithPersonality },
-        { role: 'user', content: userPromptOrMessages }
-      ];
-    }
-
-    const payload = {
-      messages: messages,
-      // Provide enough max_tokens for the model to generate full JSON arguments or reasoning, 
-      // but low enough to avoid the 8k TPM limit on the free tier.
-      max_tokens: isLongForm ? 4000 : 800,
-      temperature: 0.6
-    };
-
-    if (enableTools) {
-      payload.tools = [
-        {
-          type: "function",
-          function: {
-            name: "open_desktop_app",
-            description: "Launches a local Windows desktop application (e.g., notepad, calculator, vscode, chrome).",
-            parameters: {
-              type: "object",
-              properties: {
-                appName: { type: "string", description: "The name of the app to launch." }
-              },
-              required: ["appName"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "search_web_app",
-            description: "Opens a web app like YouTube or Google to either perform a search or directly play media.",
-            parameters: {
-              type: "object",
-              properties: {
-                targetApp: { type: "string", enum: ["youtube", "google", "instagram", "spotify"], description: "The web app to open." },
-                searchQuery: { type: "string", description: "The search query. Leave empty to just open the app." },
-                action: { type: "string", enum: ["search", "play"], description: "Whether to just 'search' for the query, or directly 'play' the media (auto-play). Use 'play' when the user explicitly asks to play something." }
-              },
-              required: ["targetApp"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "change_system_volume",
-            description: "Changes the system audio volume.",
-            parameters: {
-              type: "object",
-              properties: {
-                action: { type: "string", enum: ["volume-up", "volume-down", "volume-set", "mute"], description: "The volume action." },
-                amount: { type: "number", description: "The percentage amount to set or change the volume by (e.g. 10)." }
-              },
-              required: ["action"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "fetch_system_status",
-            description: "Fetches live system telemetry (CPU usage, RAM usage). Call this when the user asks about system status, load, or PC health.",
-            parameters: {
-              type: "object",
-              properties: {},
-              required: []
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "control_media",
-            description: "Controls playing media on the PC (play, pause, next track, previous track).",
-            parameters: {
-              type: "object",
-              properties: {
-                action: { type: "string", enum: ["play-pause", "next", "prev"], description: "The media action." }
-              },
-              required: ["action"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "search_web_summary",
-            description: "Fetches and reads the text content of a webpage to answer a question silently without opening a browser.",
-            parameters: {
-              type: "object",
-              properties: {
-                url: { type: "string", description: "The exact URL to read (e.g. https://en.wikipedia.org/wiki/Artificial_intelligence)." }
-              },
-              required: ["url"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "remember_fact",
-            description: "Saves a permanent fact or preference about the user to your long-term memory.",
-            parameters: {
-              type: "object",
-              properties: {
-                key: { type: "string", description: "A short, unique identifier for the fact (e.g. 'favorite_color')." },
-                value: { type: "string", description: "The actual fact to remember." }
-              },
-              required: ["key", "value"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "analyze_screen",
-            description: "Takes a snapshot of the user's screen and analyzes it. Call this when the user asks what is on their screen, asks you to look at something, or asks you to read their screen.",
-            parameters: {
-              type: "object",
-              properties: {
-                query: { type: "string", description: "The specific question the user is asking about their screen." }
-              },
-              required: ["query"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "search_local_files",
-            description: "Searches the user's local Windows file system for files matching a query. Call this when the user asks to find, search for, or locate files.",
-            parameters: {
-              type: "object",
-              properties: {
-                query: { type: "string", description: "The search query (e.g. 'resume', 'budget report')." }
-              },
-              required: ["query"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "create_document",
-            description: "Drafts a long-form document or essay and saves it as a .docx file on the desktop. Call this when the user asks to write an essay, draft a paper, or create a document.",
-            parameters: {
-              type: "object",
-              properties: {
-                topic: { type: "string", description: "The core topic of the document." },
-                originalRequest: { type: "string", description: "The exact, full original request from the user (e.g. 'write a 200 word sarcastic essay on AI')." }
-              },
-              required: ["topic", "originalRequest"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "search_conversation_memory",
-            description: "Searches through past conversation history to recall what was discussed. Call this when the user asks 'what did we talk about', 'do you remember', or 'search memory'.",
-            parameters: {
-              type: "object",
-              properties: {
-                query: { type: "string", description: "The subject to search for in past memories." }
-              },
-              required: ["query"]
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "inspect_and_interact_web",
-            description: "An autonomous browser agent. Call this to navigate to a URL, read its content, click elements, or type into inputs. The response will contain the updated webpage state.",
-            parameters: {
-              type: "object",
-              properties: {
-                action: { type: "string", enum: ["navigate", "click", "type", "getDOM"], description: "The action to perform." },
-                url: { type: "string", description: "The URL to navigate to (required for 'navigate')." },
-                elementId: { type: "string", description: "The ID of the element to interact with (required for 'click' and 'type')." },
-                text: { type: "string", description: "The text to type (required for 'type')." }
-              },
-              required: ["action"]
-            }
-          }
-        }
-      ];
-    }
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(8000)
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Groq API HTTP ${res.status} - ${errText}`);
-      }
-      const data = await res.json();
-
-      const message = data.choices?.[0]?.message;
-      if (message?.tool_calls) {
-        return { type: 'tool_calls', calls: message.tool_calls };
-      }
-
-      const reply = message?.content;
-      if (!reply || reply.trim().length === 0) {
-        if (enableTools) {
-          console.log(`✅ Groq returned an empty text response after tools. Falling back to default success message.`);
-          return { type: 'text', content: "Action completed successfully, Boss." };
-        }
-        throw new Error(`Groq API empty response`);
-      }
-      console.log(`✅ Groq responded quickly!`);
-      return { type: 'text', content: reply.trim() };
-    } catch (e) {
-      console.warn("Groq API failed:", e.errors || e.message);
-      throw e;
-    }
-  }
-
   speakAndLog(text) {
-    this.appendChatMessage('friday', text);
+    this.uiManager.appendChatMessage('friday', text);
     this.voiceEngine.speak(text);
-  }
-
-  appendChatMessage(author, text) {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `chat-msg msg-${author}`;
-
-    const authorDiv = document.createElement('div');
-    authorDiv.className = 'msg-author';
-    authorDiv.textContent = author === 'friday' ? 'F.R.I.D.A.Y.' : 'YOU (BOSS)';
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'msg-content';
-    contentDiv.textContent = text;
-
-    const timeDiv = document.createElement('div');
-    timeDiv.className = 'msg-time';
-    timeDiv.textContent = new Date().toLocaleTimeString();
-
-    msgDiv.appendChild(authorDiv);
-    msgDiv.appendChild(contentDiv);
-    msgDiv.appendChild(timeDiv);
-
-    this.chatStream.appendChild(msgDiv);
-    this.chatStream.scrollTop = this.chatStream.scrollHeight;
   }
 
   /* ------------------------------------------------------------------------

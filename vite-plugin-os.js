@@ -255,10 +255,10 @@ export default function fridayOSPlugin() {
       server.middlewares.use('/api/web-agent', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         try {
-          const { action, url, elementId, text } = await parseBody(req);
+          const { action, url, elementId, text, direction } = await parseBody(req);
           
           // Import dynamically since web-agent is ESM
-          const { navigate, click, type, getSimplifiedDOM } = await import('./web-agent.js');
+          const { navigate, click, type, getSimplifiedDOM, scroll } = await import('./web-agent.js');
           
           let result = "";
           if (action === 'navigate') {
@@ -267,6 +267,8 @@ export default function fridayOSPlugin() {
             result = await click(elementId);
           } else if (action === 'type') {
             result = await type(elementId, text);
+          } else if (action === 'scroll') {
+            result = await scroll(direction);
           } else if (action === 'getDOM') {
             result = await getSimplifiedDOM();
           }
@@ -402,66 +404,78 @@ export default function fridayOSPlugin() {
         }
       });
 
-      // --- SECURE CHAT PROXY (GROQ) ---
+      // --- SECURE CHAT PROXY (GROQ or OLLAMA) ---
       server.middlewares.use('/api/chat', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         const { messages, max_tokens, temperature, tools } = await parseBody(req);
         
         let apiKey = process.env.GROQ_API_KEY;
-        if (!apiKey) {
-          try {
-            const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
-            const match = envContent.match(/(?:^|\n)GROQ_API_KEY=(.*)/);
-            if (match) apiKey = match[1].trim();
-          } catch(e) {}
-        }
+        let aiProvider = process.env.AI_PROVIDER || 'groq';
+        let ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
         
-        if (!apiKey) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Server missing Groq API key' })); return; }
-
         try {
-          // Automated Tool-Calling Probe (Zero Guesswork)
-          let validModel = 'mixtral-8x7b-32768'; // absolute worst-case fallback
-          if (!global.cachedValidModel) {
-            console.log("⏳ F.R.I.D.A.Y. is aggressively testing all your Groq models for tool-calling support...");
-            try {
-              const modelsRes = await fetch('https://api.groq.com/openai/v1/models', { 
-                headers: { 'Authorization': `Bearer ${apiKey}` },
-                signal: AbortSignal.timeout(8000)
-              });
-              if (!modelsRes.ok) throw new Error("API error");
-              const modelsData = await modelsRes.json();
-              if (!modelsData || !Array.isArray(modelsData.data)) throw new Error("Invalid response format");
-              const availableModels = modelsData.data.map(m => m.id);
-            
-            for (const model of availableModels) {
-              if (model.includes('whisper') || model.includes('vision') || model.includes('guard')) continue;
-              
-              const testRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  model: model,
-                  messages: [{ role: 'user', content: 'test' }],
-                  max_tokens: 10,
-                  tools: [{ type: "function", function: { name: "test", description: "test", parameters: { type: "object", properties: {}, required: [] } } }]
-                })
-              });
-              
-               if (testRes.ok) {
-                 global.cachedValidModel = model;
-                 console.log(`✅ SUCCESS! Found compatible tool-calling model: ${model}`);
-                 break;
-               }
-             }
-             if (!global.cachedValidModel) {
-                console.error("❌ CRITICAL: NO models on your Groq account support tool calling!");
-             }
-            } catch(e) {
-               console.warn("❌ CRITICAL: Models validation failed:", e.message);
-            }
-          }
+          const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+          const matchKey = envContent.match(/(?:^|\n)GROQ_API_KEY=(.*)/);
+          if (matchKey) apiKey = matchKey[1].trim();
           
-          validModel = global.cachedValidModel || validModel;
+          const matchProv = envContent.match(/(?:^|\n)AI_PROVIDER=(.*)/);
+          if (matchProv) aiProvider = matchProv[1].trim().toLowerCase();
+          
+          const matchOllama = envContent.match(/(?:^|\n)OLLAMA_BASE_URL=(.*)/);
+          if (matchOllama) ollamaUrl = matchOllama[1].trim();
+        } catch(e) {}
+        
+        try {
+          let targetUrl = '';
+          let headers = { 'Content-Type': 'application/json' };
+          let validModel = 'llama3.1'; // Default for Ollama
+          
+          if (aiProvider === 'groq') {
+            if (!apiKey) { res.statusCode = 500; res.end(JSON.stringify({ error: 'Server missing Groq API key' })); return; }
+            targetUrl = 'https://api.groq.com/openai/v1/chat/completions';
+            headers['Authorization'] = `Bearer ${apiKey}`;
+            
+            // Automated Tool-Calling Probe for Groq
+            validModel = 'llama-3.1-8b-instant';
+            if (!global.cachedValidModel) {
+              if (!global.groqProbePromise) {
+                global.groqProbePromise = (async () => {
+                  console.log("⏳ F.R.I.D.A.Y. is testing Groq models...");
+                  try {
+                    const modelsRes = await fetch('https://api.groq.com/openai/v1/models', { 
+                      headers, signal: AbortSignal.timeout(8000)
+                    });
+                    if (modelsRes.ok) {
+                      const modelsData = await modelsRes.json();
+                      const availableModels = modelsData.data.map(m => m.id);
+                      for (const model of availableModels) {
+                        if (model.includes('whisper') || model.includes('vision') || model.includes('guard')) continue;
+                        const testRes = await fetch(targetUrl, {
+                          method: 'POST', headers,
+                          body: JSON.stringify({
+                            model: model, messages: [{ role: 'user', content: 'test' }], max_tokens: 10,
+                            tools: [{ type: "function", function: { name: "test", description: "test", parameters: { type: "object", properties: {}, required: [] } } }]
+                          }),
+                          signal: AbortSignal.timeout(8000)
+                        });
+                        if (testRes.ok) {
+                          console.log(`✅ Found compatible Groq model: ${model}`);
+                          return model;
+                        }
+                      }
+                    }
+                  } catch(e) {}
+                  return null;
+                })();
+              }
+              global.cachedValidModel = (await global.groqProbePromise) || validModel;
+            }
+            validModel = global.cachedValidModel;
+          } else {
+            // Ollama routing
+            targetUrl = `${ollamaUrl}/v1/chat/completions`;
+            validModel = 'llama3.1'; // Ollama model name
+          }
 
           const payload = {
             model: validModel,
@@ -472,17 +486,15 @@ export default function fridayOSPlugin() {
 
           if (tools && tools.length > 0) {
             payload.tools = tools;
-            payload.tool_choice = "auto";
+            // Ollama might not support 'tool_choice' yet, but it's safe to include.
+            if (aiProvider === 'groq') payload.tool_choice = "auto";
           }
 
-          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(8000)
+            signal: AbortSignal.timeout(60000) // 60s timeout for local GPU processing
           });
           
           res.setHeader('Content-Type', 'application/json');
