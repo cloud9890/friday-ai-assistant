@@ -66,7 +66,9 @@ A futuristic, high-tech tactical AI desktop assistant inspired by Tony Stark's *
 
 ---
 
-## 🛠️ Quick Start
+## 🛠️ Quick Start & Setup Guide
+
+**IMPORTANT:** F.R.I.D.A.Y. requires a Windows OS (for PowerShell automation), microphone access, and an LLM provider (either Groq cloud or local Ollama) to function.
 
 ### 1. Clone the Repository
 ```bash
@@ -79,27 +81,26 @@ cd friday-ai-assistant
 npm install
 ```
 
-### 3. Start F.R.I.D.A.Y.
+### 3. Configure the AI Engine (Required)
+F.R.I.D.A.Y. is "brainless" until you connect her to an AI provider.
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Open `.env` and configure your provider:
+   - **Option A (Default, Groq - Extremely Fast):** Get a free API key from [Groq](https://console.groq.com/) and paste it into `GROQ_API_KEY`.
+   - **Option B (Local Privacy, Ollama):** Change `AI_PROVIDER=ollama`. Install [Ollama](https://ollama.com/), and pull the required model by running `ollama run llama3.1` in your terminal. Ensure Ollama is running in the background.
+
+*(Optional)* For the best voice experience, add your `ELEVENLABS_API_KEY`. If left blank, she will fall back to your browser's native speech synthesis.
+
+### 4. Start F.R.I.D.A.Y.
 ```bash
 npm run dev
 ```
 Open **`http://127.0.0.1:5173/`** in your browser (Chrome or Edge recommended).
 
----
-
-## ⚙️ Environment Variables (Optional)
-Create a `.env` file in the root directory (see `.env.example`). You can seamlessly switch between Groq (Cloud) and Ollama (Local) engines.
-```env
-# AI Engine Routing (groq | ollama)
-AI_PROVIDER=groq
-
-# API Keys
-ELEVENLABS_API_KEY=your_elevenlabs_api_key
-GROQ_API_KEY=your_groq_api_key
-
-# Local Models (Optional)
-OLLAMA_BASE_URL=http://localhost:11434
-```
+### 5. Grant Permissions
+When the page loads, your browser will ask for **Microphone Permissions**. You **must** allow this for the passive wake-word ("Friday") to work. Ensure you do not have pop-ups or auto-play audio blocked.
 
 ---
 

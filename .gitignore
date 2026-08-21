@@ -35,3 +35,8 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Local Application Data
+.puppeteer_data/
+reminders.json
+vite.config.js.timestamp-*.mjs
