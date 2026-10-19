@@ -29,6 +29,13 @@
   user-select: none;
 }
 
+/* Global focus-visible accessibility styling */
+:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
 body.stark-theme {
   background-color: var(--bg-dark);
   color: var(--text-main);
