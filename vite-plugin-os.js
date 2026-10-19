@@ -110,7 +110,15 @@ export default function fridayOSPlugin() {
       server.middlewares.use('/api/open-app', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         const { appName } = await parseBody(req);
-        if (!appName) { res.statusCode = 400; res.end(JSON.stringify({ error: 'appName required' })); return; }
+        if (typeof appName !== 'string' || !appName.trim()) { res.statusCode = 400; res.end(JSON.stringify({ error: 'appName required' })); return; }
+
+        // Security check: Reject app names containing suspicious shell metacharacters to prevent command injection
+        if (!/^[a-zA-Z0-9_\-\. ]+$/.test(appName.trim())) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'Invalid appName characters' }));
+          return;
+        }
 
         const cleanApp = appName.toLowerCase().trim();
         const exe = APP_EXECUTABLES[cleanApp] || cleanApp;
