@@ -1,0 +1,1 @@
+- Avoid blocking I/O (like `fs.readFileSync`) inside high-frequency request handlers (e.g. middleware). Use lazy initialization and caching (like module-level variables) to load static content (e.g. `.env` config variables) on the first request and serve them from memory thereafter.
