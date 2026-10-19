@@ -147,14 +147,16 @@ class FridayApp {
     }
 
     const render = () => {
-      this.drawArcReactor();
-      this.drawSpectrum();
+      // Fetch freqData once per frame and pass to both renderers to halve processing overhead
+      const freqData = this.voiceEngine.getFrequencyData();
+      this.drawArcReactor(freqData);
+      this.drawSpectrum(freqData);
       this.animFrameId = requestAnimationFrame(render);
     };
     render();
   }
 
-  drawArcReactor() {
+  drawArcReactor(freqData) {
     if (!this.arcCtx || !this.arcCanvas) return;
     const ctx = this.arcCtx;
     const w = this.arcCanvas.width;
@@ -168,8 +170,7 @@ class FridayApp {
     const isSpeaking = this.voiceEngine.isSpeaking;
     const isListening = this.voiceEngine.isListening;
 
-    // Get voice frequency data for core pulse
-    const freqData = this.voiceEngine.getFrequencyData();
+    // Use provided voice frequency data for core pulse
     let avgFreq = 0;
     for (let i = 0; i < freqData.length; i++) avgFreq += freqData[i];
     avgFreq = (avgFreq / freqData.length) / 255;
@@ -262,7 +263,7 @@ class FridayApp {
     ctx.stroke();
   }
 
-  drawSpectrum() {
+  drawSpectrum(freqData) {
     if (!this.spectrumCtx || !this.spectrumCanvas) return;
     const ctx = this.spectrumCtx;
     const w = this.spectrumCanvas.width;
@@ -271,7 +272,6 @@ class FridayApp {
 
     const isSpeaking = this.voiceEngine.isSpeaking;
     const isListening = this.voiceEngine.isListening;
-    const freqData = this.voiceEngine.getFrequencyData();
     const len = freqData.length;
 
     let strokeColor = '#00f0ff';
@@ -303,6 +303,9 @@ class FridayApp {
     ctx.beginPath();
     ctx.moveTo(0, midY);
 
+    let prevX = 0;
+    let prevY = midY;
+
     for (let i = 0; i < len; i++) {
       const x = i * step;
       const amplitude = ((freqData[i] - 128) / 128) * (h * 0.42);
@@ -311,11 +314,12 @@ class FridayApp {
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
-        const prevX = (i - 1) * step;
-        const prevY = midY - (((freqData[i - 1] - 128) / 128) * (h * 0.42));
         const cpX = (prevX + x) / 2;
         ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
       }
+
+      prevX = x;
+      prevY = y;
     }
 
     ctx.lineTo(w, midY);

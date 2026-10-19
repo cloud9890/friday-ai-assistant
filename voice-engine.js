@@ -42,6 +42,10 @@ export class VoiceEngine {
     this.freqData = new Uint8Array(64);
     this.initAudioAnalyser();
 
+    // Cache synth data array to prevent memory allocation in render loop
+    this.synthCount = 32;
+    this._synthData = new Uint8Array(this.synthCount);
+
     this.initRecognition();
     this.loadVoices();
   }
@@ -85,8 +89,8 @@ export class VoiceEngine {
 
     // Dynamic voice frequency generator when speaking or listening
     const time = Date.now() * 0.008;
-    const count = 32;
-    const synthData = new Uint8Array(count);
+    const count = this.synthCount;
+    const synthData = this._synthData; // reuse cached array
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
