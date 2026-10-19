@@ -302,6 +302,29 @@ export default function fridayOSPlugin() {
       server.middlewares.use('/api/web-scrape', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         const { url } = await parseBody(req);
+        if (typeof url !== 'string' || !url.trim()) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'url required' }));
+          return;
+        }
+
+        // Security check: Only allow HTTP and HTTPS protocol schemes to prevent SSRF and local file access (e.g. file://)
+        try {
+          const parsedUrl = new URL(url);
+          if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'Only http and https protocols are allowed' }));
+            return;
+          }
+        } catch (e) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'Invalid URL format' }));
+          return;
+        }
+
         try {
            const fetchRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }});
            let html = await fetchRes.text();
@@ -624,20 +647,33 @@ export default function fridayOSPlugin() {
           return;
         }
 
+        // Security: Sanitize query to prevent path traversal attempts (e.g., ../ or slashes)
+        const sanitizedQuery = query.replace(/[\/\\]|\.\./g, '');
+        if (!sanitizedQuery.trim()) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'invalid query' }));
+          return;
+        }
+
         const searchDirs = folder === 'desktop' ? [desktopDir] :
                           folder === 'documents' ? [documentsDir] :
                           [desktopDir, documentsDir, homeDir];
 
         const matches = [];
-        const cleanQ = query.toLowerCase();
+        const cleanQ = sanitizedQuery.toLowerCase();
 
         for (const dir of searchDirs) {
           try {
             if (!fs.existsSync(dir)) continue;
+            const resolvedDir = path.resolve(dir);
             const files = fs.readdirSync(dir);
             for (const f of files) {
               if (f.toLowerCase().includes(cleanQ)) {
                 const fullPath = path.join(dir, f);
+                const resolvedFullPath = path.resolve(fullPath);
+                // Security check: Ensure file path stays within target base search directory
+                if (!resolvedFullPath.startsWith(resolvedDir)) continue;
+
                 const stat = fs.statSync(fullPath);
                 matches.push({
                   name: f,
