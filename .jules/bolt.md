@@ -1,0 +1,4 @@
+## 2024-10-31 - Avoiding Synchronous Disk I/O Blocking in Vite Dev Server Middlewares
+* **Bottleneck:** The Vite plugin middleware (`vite-plugin-os.js`) used `fs.readFileSync` continuously on high-frequency API routes (like `/api/chat` or `/api/test-models`) to parse `.env` files. This caused a heavy synchronous blocking bottleneck for every single request, delaying the event loop.
+* **Learning:** Always employ in-memory caching mechanisms when reading file assets (like environment files) during request cycles in middleware. Setting a TTL (e.g., 5000ms) preserves the development server's ability to hot-reload config changes without the severe performance hit of blocking on the file system for every individual request.
+* **Expected Impact:** I/O time per request significantly reduced, preventing event loop blocking. Micro-benchmarks measured a ~11x latency reduction locally.

@@ -7,6 +7,22 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+let cachedEnvContent = null;
+let lastEnvCacheTime = 0;
+
+function getCachedEnvContent() {
+  const now = Date.now();
+  if (!cachedEnvContent || now - lastEnvCacheTime > 5000) {
+    try {
+      cachedEnvContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+      lastEnvCacheTime = now;
+    } catch (e) {
+      cachedEnvContent = '';
+    }
+  }
+  return cachedEnvContent;
+}
+
 const homeDir = os.homedir();
 // Support both standard Desktop and OneDrive Desktop paths
 let desktopDir = path.join(homeDir, 'Desktop');
@@ -366,7 +382,7 @@ export default function fridayOSPlugin() {
         let apiKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_ELEVENLABS_API_KEY;
         if (!apiKey) {
           try {
-            const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+            const envContent = getCachedEnvContent();
             const match = envContent.match(/(?:^|\n)ELEVENLABS_API_KEY=(.*)/);
             if (match) apiKey = match[1].trim();
           } catch(e) {}
@@ -414,7 +430,7 @@ export default function fridayOSPlugin() {
         let ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
         
         try {
-          const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+          const envContent = getCachedEnvContent();
           const matchKey = envContent.match(/(?:^|\n)GROQ_API_KEY=(.*)/);
           if (matchKey) apiKey = matchKey[1].trim();
           
@@ -514,7 +530,7 @@ export default function fridayOSPlugin() {
         let apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
           try {
-            const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+            const envContent = getCachedEnvContent();
             const match = envContent.match(/(?:^|\n)GROQ_API_KEY=(.*)/);
             if (match) apiKey = match[1].trim();
           } catch(e) {}
@@ -564,7 +580,7 @@ export default function fridayOSPlugin() {
         let apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
           try {
-            const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+            const envContent = getCachedEnvContent();
             const match = envContent.match(/(?:^|\n)GROQ_API_KEY=(.*)/);
             if (match) apiKey = match[1].trim();
           } catch(e) {}
