@@ -204,13 +204,15 @@ export default function fridayOSPlugin() {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         const { action, amount = 10 } = await parseBody(req);
         
+        const numericAmount = isNaN(Number(amount)) ? 10 : Number(amount);
+
         let arg = 'mute';
         if (action === 'volume-up') arg = 'up';
         else if (action === 'volume-down') arg = 'down';
         else if (action === 'volume-set') arg = 'set';
 
         const scriptPath = path.join(process.cwd(), 'volume.ps1');
-        exec(`powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "${scriptPath}" ${arg} ${amount}`);
+        exec(`powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "${scriptPath}" ${arg} ${numericAmount}`);
 
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Access-Control-Allow-Origin', '*');
