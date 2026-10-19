@@ -752,8 +752,6 @@ export default function fridayOSPlugin() {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ status: 'ok' }));
       });
-
-      console.log('\n🔧 F.R.I.D.A.Y. OS Control Plugin loaded into Vite dev server\n');
     }
   };
 }
