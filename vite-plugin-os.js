@@ -41,6 +41,18 @@ const APP_EXECUTABLES = {
 
 let taskCounter = 0;
 
+let cachedEnvContent = null;
+function getCachedEnvContent() {
+  if (cachedEnvContent === null) {
+    try {
+      cachedEnvContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+    } catch(e) {
+      cachedEnvContent = '';
+    }
+  }
+  return cachedEnvContent;
+}
+
 function findAppShortcut(appName) {
   const pathsToSearch = [
     path.join(homeDir, 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
@@ -414,7 +426,7 @@ export default function fridayOSPlugin() {
         let ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
         
         try {
-          const envContent = fs.readFileSync(path.resolve('.env'), 'utf-8');
+          const envContent = getCachedEnvContent();
           const matchKey = envContent.match(/(?:^|\n)GROQ_API_KEY=(.*)/);
           if (matchKey) apiKey = matchKey[1].trim();
           
