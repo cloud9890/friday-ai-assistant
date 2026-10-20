@@ -1,0 +1,3 @@
+## 2025-05-20 - Canvas Audio Visualizer Typed Array Allocation
+**Learning:** `VoiceEngine.prototype.getFrequencyData` is invoked multiple times per frame in `requestAnimationFrame` render loops (`drawArcReactor` and `drawSpectrum`). Allocating `new Uint8Array(32)` on each invocation generates 120-288 object allocations per second, triggering frequent garbage collection pauses during HUD animations. Re-using a single `synthFreqData` instance buffer in the engine class eliminates all heap allocations in the hot render path without side effects.
+**Action:** Always pre-allocate Uint8Array / Float32Array buffers on class instances when generating or processing frequency/audio data for canvas animation loops.
