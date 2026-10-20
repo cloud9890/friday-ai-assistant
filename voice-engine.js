@@ -40,6 +40,9 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // Bolt Optimization: Reusable buffer for fallback/synthesized frequency calculations
+    // to avoid allocating new Uint8Array on every requestAnimationFrame render frame.
+    this.synthFreqData = new Uint8Array(32);
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -83,10 +86,12 @@ export class VoiceEngine {
       if (sum > 0) return this.freqData;
     }
 
-    // Dynamic voice frequency generator when speaking or listening
+    // Dynamic voice frequency generator when speaking or listening.
+    // Bolt Optimization: Reuse pre-allocated synthFreqData buffer to eliminate
+    // 120-288 array allocations/sec in the hot 60fps canvas animation loop.
     const time = Date.now() * 0.008;
-    const count = 32;
-    const synthData = new Uint8Array(count);
+    const synthData = this.synthFreqData;
+    const count = synthData.length;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
