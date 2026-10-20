@@ -29,6 +29,12 @@
   user-select: none;
 }
 
+:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
 body.stark-theme {
   background-color: var(--bg-dark);
   color: var(--text-main);
