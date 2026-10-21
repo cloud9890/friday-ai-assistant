@@ -40,6 +40,9 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // Pre-allocated synthetic frequency buffer and frame-timestamp cache to avoid per-frame GC allocations
+    this.synthFreqData = new Uint8Array(32);
+    this.lastFreqFrameTime = 0;
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -75,6 +78,11 @@ export class VoiceEngine {
     }
   }
 
+  /**
+   * Performance-optimized frequency data getter:
+   * - Uses pre-allocated Uint8Array (synthFreqData) to eliminate GC pressure (0 heap allocations per 60fps frame).
+   * - Caches calculations within frame duration (~10ms) to avoid redundant trig math when called multiple times per frame.
+   */
   getFrequencyData() {
     if (this.analyser && this.isSpeaking) {
       this.analyser.getByteFrequencyData(this.freqData);
@@ -83,10 +91,17 @@ export class VoiceEngine {
       if (sum > 0) return this.freqData;
     }
 
+    const now = Date.now();
+    // Cache result within ~10ms window to avoid duplicate calculations per animation frame
+    if (now - this.lastFreqFrameTime < 10) {
+      return this.synthFreqData;
+    }
+    this.lastFreqFrameTime = now;
+
     // Dynamic voice frequency generator when speaking or listening
-    const time = Date.now() * 0.008;
+    const time = now * 0.008;
     const count = 32;
-    const synthData = new Uint8Array(count);
+    const synthData = this.synthFreqData;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
