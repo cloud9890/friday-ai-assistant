@@ -98,16 +98,36 @@ class MemoryStore {
 
   async searchMemory(query) {
     await this.ready;
-    try {
-      const all = await this.getAllMessages();
+    if (!query) return [];
+    return new Promise((resolve, reject) => {
+      // PERF OPTIMIZATION (Bolt): Use a reverse cursor ('prev') on the 'timestamp' index
+      // to stream messages from newest to oldest and stop immediately after finding 10 matches.
+      // This avoids loading all conversation history into memory (O(N) heap allocation)
+      // and eliminates wasteful string lowercasing across non-matching older entries.
+      const tx = this.db.transaction('conversations', 'readonly');
+      tx.onerror = () => reject(tx.error || new Error('Transaction error'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
+
+      const store = tx.objectStore('conversations');
+      const index = store.index('timestamp');
+      const results = [];
       const q = query.toLowerCase();
-      return all.filter(m =>
-        m.text && m.text.toLowerCase().includes(q)
-      ).slice(-10); // Return last 10 matches
-    } catch (e) {
-      console.warn("searchMemory error:", e);
-      return [];
-    }
+
+      const cursorReq = index.openCursor(null, 'prev');
+      cursorReq.onerror = () => reject(cursorReq.error);
+      cursorReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < 10) {
+          const m = cursor.value;
+          if (m && m.text && m.text.toLowerCase().includes(q)) {
+            results.unshift(m); // Maintain chronological order (oldest -> newest)
+          }
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+    });
   }
 
   async getAllMessages() {

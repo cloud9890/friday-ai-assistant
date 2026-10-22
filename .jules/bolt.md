@@ -1,0 +1,3 @@
+## 2025-05-18 - IndexedDB Search Optimization with Reverse Cursor
+**Learning:** MemoryStore was performing `getAllMessages()` to load all historical conversation entries into JS memory before doing array `.filter()` and `.slice(-10)`. For IndexedDB queries on large datasets, using `index.openCursor(null, 'prev')` allows streaming items from newest to oldest and terminating early once target match count is hit.
+**Action:** Always prefer reverse cursor traversal (`openCursor(null, 'prev')`) with early termination over full dataset dumps (`getAll()`) when retrieving recent matching records from IndexedDB.
