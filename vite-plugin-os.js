@@ -2,7 +2,7 @@
    F.R.I.D.A.Y. // VITE PLUGIN — OS CONTROL MIDDLEWARE (BULLETPROOF)
    ========================================================================== */
 
-import { exec, execSync, execFile } from 'child_process';
+import { exec, execSync, execFile, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -80,7 +80,7 @@ function launchInInteractiveSession(target) {
     execFile(cmd, args, { timeout: 10000 }, (err) => {
       if (err) {
         console.warn(`  ❌ Launch failed for "${target}":`, err.message);
-        exec(`start "" "${target.replace(/"/g, '""')}"`, (err2) => {
+        execFile('cmd.exe', ['/c', 'start', '""', target], (err2) => {
           resolve(!err2);
         });
       } else {
@@ -210,7 +210,7 @@ export default function fridayOSPlugin() {
         else if (action === 'volume-set') arg = 'set';
 
         const scriptPath = path.join(process.cwd(), 'volume.ps1');
-        exec(`powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "${scriptPath}" ${arg} ${amount}`);
+        execFile('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath, arg, String(amount)]);
 
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -343,8 +343,13 @@ export default function fridayOSPlugin() {
            }
            
            if (finalUrl) {
-             const command = process.platform === 'win32' ? `start "" "${finalUrl}"` : process.platform === 'darwin' ? `open "${finalUrl}"` : `xdg-open "${finalUrl}"`;
-             exec(command);
+             if (process.platform === 'win32') {
+               execFile('cmd.exe', ['/c', 'start', '""', finalUrl]);
+             } else if (process.platform === 'darwin') {
+               execFile('open', [finalUrl]);
+             } else {
+               execFile('xdg-open', [finalUrl]);
+             }
            }
            
            res.setHeader('Content-Type', 'application/json');
@@ -725,7 +730,7 @@ export default function fridayOSPlugin() {
               } else {
                 // Silently try powershell hidden start to avoid CMD flash and error dialogs
                 try {
-                  execSync(`powershell.exe -WindowStyle Hidden -Command "Start-Process '${step.target.replace(/'/g, "''")}' -ErrorAction Stop"`, { stdio: 'ignore', timeout: 5000 });
+                  execFileSync('powershell.exe', ['-WindowStyle', 'Hidden', '-Command', 'Start-Process', step.target, '-ErrorAction', 'Stop'], { stdio: 'ignore', timeout: 5000 });
                   results.push(`Launched ${step.target} via powershell`);
                 } catch(e) {
                   results.push(`Failed to launch ${step.target}`);

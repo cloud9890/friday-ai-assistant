@@ -1,0 +1,4 @@
+## 2024-10-19 - Command Injection in execute-macro
+**Vulnerability:** Command injection vulnerability in `vite-plugin-os.js` in the `/api/execute-macro` endpoint. The `execSync` call uses string interpolation with unsanitized user input `step.target`.
+**Learning:** Even when replacing single quotes, it is possible to inject commands if the input is not strictly validated or if the escaping is insufficient (e.g. escaping single quotes by duplicating them in PowerShell `` can still be bypassed or combined with other characters depending on context). Additionally, there are other `exec` calls that might be vulnerable.
+**Prevention:** Avoid passing raw user input directly to shell execution functions. Prefer using `execFile` with arguments, or strictly validate and sanitize input against an allowlist.
