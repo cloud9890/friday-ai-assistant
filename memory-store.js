@@ -96,18 +96,47 @@ class MemoryStore {
     });
   }
 
-  async searchMemory(query) {
+  async searchMemory(query, limit = 10) {
     await this.ready;
-    try {
-      const all = await this.getAllMessages();
-      const q = query.toLowerCase();
-      return all.filter(m =>
-        m.text && m.text.toLowerCase().includes(q)
-      ).slice(-10); // Return last 10 matches
-    } catch (e) {
-      console.warn("searchMemory error:", e);
-      return [];
-    }
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction('conversations', 'readonly');
+        tx.onerror = (e) => {
+          console.warn("searchMemory error:", tx.error || e);
+          resolve([]);
+        };
+        tx.onabort = (e) => {
+          console.warn("searchMemory aborted:", tx.error || e);
+          resolve([]);
+        };
+
+        const store = tx.objectStore('conversations');
+        const index = store.index('timestamp');
+        const results = [];
+        const q = query.toLowerCase();
+
+        // ⚡ Performance Optimization: Iterate backwards (most recent first) with IndexedDB cursor.
+        // Prevents loading all historical messages into heap memory (O(N) memory & allocation)
+        // and early-exits as soon as 'limit' matches are found (O(K) streaming reads).
+        const cursorReq = index.openCursor(null, 'prev');
+        cursorReq.onerror = () => resolve([]);
+        cursorReq.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor && results.length < limit) {
+            const m = cursor.value;
+            if (m && m.text && m.text.toLowerCase().includes(q)) {
+              results.unshift(m); // Maintain chronological order
+            }
+            cursor.continue();
+          } else {
+            resolve(results);
+          }
+        };
+      } catch (e) {
+        console.warn("searchMemory error:", e);
+        resolve([]);
+      }
+    });
   }
 
   async getAllMessages() {
