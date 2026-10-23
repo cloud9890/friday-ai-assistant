@@ -1,0 +1,3 @@
+## 2026-10-23 - Streaming Reverse Cursor for IndexedDB Search
+**Learning:** `getAll()` on IndexedDB object stores loads every historical record into JS heap memory before filtering. Replacing `getAll()` with a reverse cursor (`index.openCursor(null, 'prev')`) allows streaming search over time-indexed records with an early exit limit, converting search from O(N) memory/time to O(K) where K is the number of records evaluated before reaching the match threshold.
+**Action:** Always prefer reverse IndexedDB cursors with early termination when querying indexed time-series data like conversation history or logs.
