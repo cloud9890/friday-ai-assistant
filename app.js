@@ -303,6 +303,9 @@ class FridayApp {
     ctx.beginPath();
     ctx.moveTo(0, midY);
 
+    let prevX = 0;
+    let prevY = midY;
+
     for (let i = 0; i < len; i++) {
       const x = i * step;
       const amplitude = ((freqData[i] - 128) / 128) * (h * 0.42);
@@ -311,11 +314,11 @@ class FridayApp {
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
-        const prevX = (i - 1) * step;
-        const prevY = midY - (((freqData[i - 1] - 128) / 128) * (h * 0.42));
         const cpX = (prevX + x) / 2;
         ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
       }
+      prevX = x;
+      prevY = y;
     }
 
     ctx.lineTo(w, midY);

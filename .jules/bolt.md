@@ -1,0 +1,3 @@
+## 2025-05-18 - Canvas Visualizer TypedArray GC Pressure and Frame-Level Audio Caching
+**Learning:** In canvas visualizer animation loops running at 60 FPS, calling voice frequency generation methods multiple times per frame (e.g., `drawArcReactor` and `drawSpectrum` both calling `getFrequencyData()`) creates transient `Uint8Array` allocations and duplicate math queries, triggering frequent garbage collection pauses.
+**Action:** Pre-allocate fixed `Uint8Array` buffers on the engine instance and use frame-level timestamp caching (~8ms window) to return precomputed frequency data instantly across multiple visualizer passes in the same animation frame.
