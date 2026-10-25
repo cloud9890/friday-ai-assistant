@@ -1,0 +1,3 @@
+## 2026-10-25 - Avoid TypedArray allocations in requestAnimationFrame loops
+**Learning:** `VoiceEngine.getFrequencyData()` generated synthetic frequency data when offline by creating `new Uint8Array(32)` on every call. In `app.js`, multiple canvas renderers (`drawArcReactor` and `drawSpectrum`) were each calling `getFrequencyData()` separately inside `requestAnimationFrame`, resulting in ~120 TypedArray heap allocations per second (7,200/min).
+**Action:** Pre-allocate typed array buffers in class constructors for animation loops, and sample shared data once per frame in `render()` to pass down to sub-renderers.

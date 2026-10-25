@@ -40,6 +40,8 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // Pre-allocated array for synthetic frequency data to prevent GC heap churn in 60 FPS animation loop
+    this.synthData = new Uint8Array(32);
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -84,9 +86,10 @@ export class VoiceEngine {
     }
 
     // Dynamic voice frequency generator when speaking or listening
+    // Performance: reuse pre-allocated this.synthData to avoid 120 typed array allocations/sec in 60 FPS HUD loop
     const time = Date.now() * 0.008;
     const count = 32;
-    const synthData = new Uint8Array(count);
+    const synthData = this.synthData;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
