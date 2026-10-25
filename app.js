@@ -558,6 +558,8 @@ class FridayApp {
       const delBtn = document.createElement('button');
       delBtn.className = 'directive-del';
       delBtn.innerHTML = '&times;';
+      delBtn.setAttribute('aria-label', `Delete directive: ${d.text}`);
+      delBtn.setAttribute('title', 'Delete directive');
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.deleteDirective(d.id);
