@@ -40,6 +40,8 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // Pre-allocated reusable buffer to avoid GC allocations during animation loops
+    this.synthData = new Uint8Array(32);
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -84,23 +86,23 @@ export class VoiceEngine {
     }
 
     // Dynamic voice frequency generator when speaking or listening
+    // Reuses pre-allocated this.synthData Uint8Array buffer to prevent GC pressure
     const time = Date.now() * 0.008;
-    const count = 32;
-    const synthData = new Uint8Array(count);
+    const count = this.synthData.length;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
       if (intensity < 0.1) {
-        synthData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
+        this.synthData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
       } else {
         const formant1 = Math.sin(i * 0.4 + time * 3) * 0.5 + 0.5;
         const formant2 = Math.cos(i * 0.7 - time * 5) * 0.5 + 0.5;
         const harmonic = (formant1 * 0.6 + formant2 * 0.4) * 200 * intensity;
         const noise = Math.random() * 40 * intensity;
-        synthData[i] = Math.min(255, Math.max(10, harmonic + noise));
+        this.synthData[i] = Math.min(255, Math.max(10, harmonic + noise));
       }
     }
-    return synthData;
+    return this.synthData;
   }
 
   async requestMicrophonePermission() {
