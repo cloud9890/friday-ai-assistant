@@ -356,12 +356,12 @@ class FridayApp {
         soundFX.playClick();
         if (this.visionEngine.isSharing) {
           this.visionEngine.stopScreenShare();
-          btnShareScreen.classList.remove('active');
+          this.uiManager.deactivateScreenShareBtn();
           this.speakAndLog("Screen sharing deactivated, Boss.");
         } else {
           const started = await this.visionEngine.startScreenShare();
           if (started) {
-            btnShareScreen.classList.add('active');
+            this.uiManager.activateScreenShareBtn();
             this.speakAndLog("Visual cortex online. I can now see your screen, Boss. Say 'inspect my screen' for analysis.");
           } else {
             this.speakAndLog("Screen sharing could not be started, Boss. Please check your browser permissions.");
@@ -382,12 +382,14 @@ class FridayApp {
     this.btnToggleSound.addEventListener('click', () => {
       soundFX.enabled = !soundFX.enabled;
       this.btnToggleSound.classList.toggle('active', soundFX.enabled);
+      this.btnToggleSound.setAttribute('aria-pressed', soundFX.enabled ? 'true' : 'false');
       if (soundFX.enabled) soundFX.playClick();
     });
 
     this.btnToggleVoice.addEventListener('click', () => {
       this.voiceEngine.voiceOutputEnabled = !this.voiceEngine.voiceOutputEnabled;
       this.btnToggleVoice.classList.toggle('active', this.voiceEngine.voiceOutputEnabled);
+      this.btnToggleVoice.setAttribute('aria-pressed', this.voiceEngine.voiceOutputEnabled ? 'true' : 'false');
       soundFX.playClick();
     });
 
