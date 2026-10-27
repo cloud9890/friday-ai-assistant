@@ -101,10 +101,16 @@ export class UIManager {
   }
 
   activateScreenShareBtn() {
-    if (this.btnShareScreen) this.btnShareScreen.classList.add('active');
+    if (this.btnShareScreen) {
+      this.btnShareScreen.classList.add('active');
+      this.btnShareScreen.setAttribute('aria-pressed', 'true');
+    }
   }
 
   deactivateScreenShareBtn() {
-    if (this.btnShareScreen) this.btnShareScreen.classList.remove('active');
+    if (this.btnShareScreen) {
+      this.btnShareScreen.classList.remove('active');
+      this.btnShareScreen.setAttribute('aria-pressed', 'false');
+    }
   }
 }
