@@ -225,13 +225,15 @@ class FridayApp {
 
     // 4. 10 Rotating Coils / Repulsor Nodes
     const segments = 10;
+    // Precalculate angle step outside loop to avoid division inside RAF frame
+    const stepAngle = (Math.PI * 2) / segments;
     const coilRadius = 72;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(time * 0.3);
 
     for (let i = 0; i < segments; i++) {
-      const angle = (i * (Math.PI * 2 / segments));
+      const angle = i * stepAngle;
       const nx = Math.cos(angle) * coilRadius;
       const ny = Math.sin(angle) * coilRadius;
 
