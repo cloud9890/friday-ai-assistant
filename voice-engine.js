@@ -40,6 +40,8 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // OPTIMIZATION: Pre-allocate synthData buffer to prevent garbage collection pressure in rAF loop (120 allocs/sec -> 0)
+    this.synthData = new Uint8Array(32);
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -86,7 +88,8 @@ export class VoiceEngine {
     // Dynamic voice frequency generator when speaking or listening
     const time = Date.now() * 0.008;
     const count = 32;
-    const synthData = new Uint8Array(count);
+    // OPTIMIZATION: Reuse pre-allocated TypedArray buffer instead of instantiating new Uint8Array every animation frame
+    const synthData = this.synthData;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {

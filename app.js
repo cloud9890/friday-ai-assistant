@@ -170,9 +170,10 @@ class FridayApp {
 
     // Get voice frequency data for core pulse
     const freqData = this.voiceEngine.getFrequencyData();
+    const freqLen = freqData.length;
     let avgFreq = 0;
-    for (let i = 0; i < freqData.length; i++) avgFreq += freqData[i];
-    avgFreq = (avgFreq / freqData.length) / 255;
+    for (let i = 0; i < freqLen; i++) avgFreq += freqData[i];
+    avgFreq = (avgFreq / freqLen) / 255;
 
     let primaryColor = '#00f0ff';
     let glowRgb = '0, 240, 255';
@@ -286,13 +287,17 @@ class FridayApp {
 
     const midY = h / 2;
     const step = w / (len - 1);
+    // OPTIMIZATION: Hoist loop-invariant calculations out of render loop
+    const colW = w / len;
+    const barW = colW * 0.6;
+    const barScale = h * 0.75;
+    const waveScale = h * 0.42;
 
     // 1. Draw Equalizer Frequency Bars
     ctx.fillStyle = strokeColor;
-    const barW = (w / len) * 0.6;
     for (let i = 0; i < len; i++) {
-      const val = (freqData[i] / 255) * (h * 0.75);
-      const x = i * (w / len) + 2;
+      const val = (freqData[i] / 255) * barScale;
+      const x = i * colW + 2;
       const barH = Math.max(2, val);
       ctx.globalAlpha = 0.35;
       ctx.fillRect(x, h - barH, barW, barH);
@@ -305,7 +310,7 @@ class FridayApp {
 
     for (let i = 0; i < len; i++) {
       const x = i * step;
-      const amplitude = ((freqData[i] - 128) / 128) * (h * 0.42);
+      const amplitude = ((freqData[i] - 128) / 128) * waveScale;
       const y = midY - amplitude;
 
       if (i === 0) {
