@@ -1165,6 +1165,13 @@ body.stark-theme {
   box-shadow: 0 0 15px var(--red-alert);
 }
 
+/* Accessibility Focus States for Keyboard Navigation */
+:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}
+
 /* Responsive adjustments */
 @media (max-width: 1024px) {
   .hud-main-grid {
