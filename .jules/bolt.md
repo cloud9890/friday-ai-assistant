@@ -1,0 +1,3 @@
+## 2025-05-18 - Audio Visualizer Per-Frame TypedArray Allocation
+**Learning:** Calling frequency data visualizer methods inside high-FPS canvas `requestAnimationFrame` loops can trigger thousands of `Uint8Array` allocations per minute if fallback synthetic data isn't pre-allocated. Caching results per animation frame timestamp also avoids redundant WebAudio FFT / trigonometric math calls when multiple visualizer components request frequency data in the same frame.
+**Action:** Always pre-allocate typed arrays in constructors for WebAudio/canvas visualizers, and cache frame-level calculation results using frame timestamp deltas.

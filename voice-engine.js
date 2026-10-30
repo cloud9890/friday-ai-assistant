@@ -40,6 +40,9 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    this.synthFreqData = new Uint8Array(32);
+    this.lastFreqTime = 0;
+    this.cachedFreqResult = null;
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -76,31 +79,42 @@ export class VoiceEngine {
   }
 
   getFrequencyData() {
+    const time = Date.now() * 0.008;
+
+    // Optimization: Reuse frame calculation when called multiple times within the same animation frame (~1ms)
+    if (this.cachedFreqResult && Math.abs(time - this.lastFreqTime) < 0.005) {
+      return this.cachedFreqResult;
+    }
+
+    this.lastFreqTime = time;
+
     if (this.analyser && this.isSpeaking) {
       this.analyser.getByteFrequencyData(this.freqData);
       let sum = 0;
       for (let i = 0; i < this.freqData.length; i++) sum += this.freqData[i];
-      if (sum > 0) return this.freqData;
+      if (sum > 0) {
+        this.cachedFreqResult = this.freqData;
+        return this.freqData;
+      }
     }
 
-    // Dynamic voice frequency generator when speaking or listening
-    const time = Date.now() * 0.008;
+    // Dynamic voice frequency generator using pre-allocated typed array (prevents per-frame GC allocations)
     const count = 32;
-    const synthData = new Uint8Array(count);
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
       if (intensity < 0.1) {
-        synthData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
+        this.synthFreqData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
       } else {
         const formant1 = Math.sin(i * 0.4 + time * 3) * 0.5 + 0.5;
         const formant2 = Math.cos(i * 0.7 - time * 5) * 0.5 + 0.5;
         const harmonic = (formant1 * 0.6 + formant2 * 0.4) * 200 * intensity;
         const noise = Math.random() * 40 * intensity;
-        synthData[i] = Math.min(255, Math.max(10, harmonic + noise));
+        this.synthFreqData[i] = Math.min(255, Math.max(10, harmonic + noise));
       }
     }
-    return synthData;
+    this.cachedFreqResult = this.synthFreqData;
+    return this.synthFreqData;
   }
 
   async requestMicrophonePermission() {
