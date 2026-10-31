@@ -546,6 +546,14 @@ class FridayApp {
     const activeCount = this.directives.filter(d => !d.completed).length;
     this.directiveCount.textContent = `${activeCount} ACTIVE`;
 
+    if (this.directives.length === 0) {
+      const emptyLi = document.createElement('li');
+      emptyLi.className = 'directive-empty';
+      emptyLi.textContent = 'NO ACTIVE DIRECTIVES // ALL SYSTEMS CLEAR';
+      this.directiveList.appendChild(emptyLi);
+      return;
+    }
+
     this.directives.forEach(d => {
       const li = document.createElement('li');
       li.className = `directive-item ${d.completed ? 'completed' : ''}`;
@@ -553,11 +561,21 @@ class FridayApp {
       const span = document.createElement('span');
       span.textContent = d.text;
       span.style.cursor = 'pointer';
+      span.setAttribute('role', 'checkbox');
+      span.setAttribute('aria-checked', String(d.completed));
+      span.setAttribute('tabindex', '0');
       span.addEventListener('click', () => this.toggleDirective(d.id));
+      span.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.toggleDirective(d.id);
+        }
+      });
 
       const delBtn = document.createElement('button');
       delBtn.className = 'directive-del';
       delBtn.innerHTML = '&times;';
+      delBtn.setAttribute('aria-label', `Delete directive: ${d.text}`);
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.deleteDirective(d.id);

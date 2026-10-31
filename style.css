@@ -964,12 +964,31 @@ body.stark-theme {
   opacity: 0.5;
 }
 
+.directive-empty {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 0.8rem 0.4rem;
+  letter-spacing: 1px;
+  border: 1px dashed rgba(0, 240, 255, 0.15);
+  border-radius: 4px;
+}
+
 .directive-del {
   background: none;
   border: none;
   color: var(--red-alert);
   cursor: pointer;
   font-size: 0.8rem;
+}
+
+/* Accessible focus indicators for keyboard navigation */
+button:focus-visible,
+input:focus-visible,
+.directive-item span:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
 }
 
 /* Protocols Control Deck */
