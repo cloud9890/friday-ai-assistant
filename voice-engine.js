@@ -40,6 +40,8 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // ⚡ Bolt: Pre-allocate synthetic buffer to avoid GC allocations in 60fps render loop
+    this.synthFreqData = new Uint8Array(32);
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -84,9 +86,10 @@ export class VoiceEngine {
     }
 
     // Dynamic voice frequency generator when speaking or listening
+    // ⚡ Bolt: Reuse pre-allocated typed array to eliminate ~120 allocations/sec on requestAnimationFrame
     const time = Date.now() * 0.008;
     const count = 32;
-    const synthData = new Uint8Array(count);
+    const synthData = this.synthFreqData;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
