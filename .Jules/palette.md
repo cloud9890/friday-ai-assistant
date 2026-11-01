@@ -1,0 +1,3 @@
+## 2025-05-18 - Keyboard Focus Indicators for Custom HUD Design Systems
+**Learning:** High-contrast sci-fi/HUD themes often rely purely on mouse hover states (`:hover`), rendering keyboard navigation invisible. Applying `:focus-visible` with the primary HUD neon accent (`var(--cyan-primary)`) maintains the thematic Stark aesthetics while ensuring full WCAG 2.1 keyboard focus visibility without cluttering standard mouse clicks.
+**Action:** When working with customized dark/HUD themes, always pair hover glow styles with corresponding `:focus-visible` outline and glow styles on all interactive control types (`button`, `input`, `.quick-chip`).

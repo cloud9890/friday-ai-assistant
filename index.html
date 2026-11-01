@@ -56,15 +56,15 @@
           </svg>
         </button>
 
-        <button id="btnToggleSound" class="icon-btn active" title="Toggle Sound FX">
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2">
+        <button id="btnToggleSound" class="icon-btn active" title="Toggle Sound FX" aria-label="Toggle Sound FX">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" aria-hidden="true">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
           </svg>
         </button>
         
-        <button id="btnToggleVoice" class="icon-btn active" title="Toggle Voice Output">
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2">
+        <button id="btnToggleVoice" class="icon-btn active" title="Toggle Voice Output" aria-label="Toggle Voice Output">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" aria-hidden="true">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
             <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -224,14 +224,14 @@
 
         <!-- User Command Input Dock -->
         <div class="command-dock">
-          <button id="btnMic" class="mic-trigger-btn" title="Voice Input (Click or say 'Friday')">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <button id="btnMic" class="mic-trigger-btn" title="Voice Input (Click or say 'Friday')" aria-label="Voice Input (Click or say 'Friday')">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
               <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
             </svg>
           </button>
 
-          <input type="text" id="cmdInput" class="cmd-input" placeholder="Initiate query or command... (e.g. 'Friday, suit status' or 'Friday, system scan')" autocomplete="off"/>
+          <input type="text" id="cmdInput" class="cmd-input" placeholder="Initiate query or command... (e.g. 'Friday, suit status' or 'Friday, system scan')" aria-label="Initiate query or command" autocomplete="off"/>
 
           <button id="btnSend" class="send-btn">
             <span>EXECUTE</span>
@@ -309,8 +309,8 @@
         </div>
         <div class="card-body">
           <div class="directive-input-wrap">
-            <input type="text" id="directiveInput" placeholder="Add new directive or say 'Friday, note...'"/>
-            <button id="btnAddDirective">+</button>
+            <input type="text" id="directiveInput" placeholder="Add new directive or say 'Friday, note...'" aria-label="Add new directive"/>
+            <button id="btnAddDirective" aria-label="Add directive">+</button>
           </div>
           
           <ul class="directive-list" id="directiveList">
