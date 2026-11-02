@@ -40,6 +40,12 @@ export class VoiceEngine {
     this.audioCtx = null;
     this.analyser = null;
     this.freqData = new Uint8Array(64);
+    // Bolt: Preallocate reusable buffer for synthetic frequency generation to prevent
+    // 120-288 GC heap allocations per second in the 60-144 FPS canvas render loop
+    this.synthFreqCount = 32;
+    this.synthData = new Uint8Array(this.synthFreqCount);
+    this.lastFreqTime = 0;
+    this.lastFreqResult = null;
     this.initAudioAnalyser();
 
     this.initRecognition();
@@ -76,31 +82,44 @@ export class VoiceEngine {
   }
 
   getFrequencyData() {
+    // Bolt: Cache and reuse frequency data within the same animation frame (~5ms).
+    // drawArcReactor and drawSpectrum run in the same requestAnimationFrame tick;
+    // this eliminates duplicate trigonometry/noise loops and redundant Web Audio reads.
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (this.lastFreqResult && (now - this.lastFreqTime < 5)) {
+      return this.lastFreqResult;
+    }
+    this.lastFreqTime = now;
+
     if (this.analyser && this.isSpeaking) {
       this.analyser.getByteFrequencyData(this.freqData);
       let sum = 0;
       for (let i = 0; i < this.freqData.length; i++) sum += this.freqData[i];
-      if (sum > 0) return this.freqData;
+      if (sum > 0) {
+        this.lastFreqResult = this.freqData;
+        return this.freqData;
+      }
     }
 
-    // Dynamic voice frequency generator when speaking or listening
+    // Dynamic voice frequency generator when speaking or listening.
+    // Re-uses preallocated this.synthData in-place for zero-allocation performance.
     const time = Date.now() * 0.008;
-    const count = 32;
-    const synthData = new Uint8Array(count);
+    const count = this.synthFreqCount;
     const intensity = this.isSpeaking ? 1.0 : (this.isListening ? 0.35 : 0.05);
 
     for (let i = 0; i < count; i++) {
       if (intensity < 0.1) {
-        synthData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
+        this.synthData[i] = Math.max(0, Math.sin(time + i * 0.2) * 8 + 4);
       } else {
         const formant1 = Math.sin(i * 0.4 + time * 3) * 0.5 + 0.5;
         const formant2 = Math.cos(i * 0.7 - time * 5) * 0.5 + 0.5;
         const harmonic = (formant1 * 0.6 + formant2 * 0.4) * 200 * intensity;
         const noise = Math.random() * 40 * intensity;
-        synthData[i] = Math.min(255, Math.max(10, harmonic + noise));
+        this.synthData[i] = Math.min(255, Math.max(10, harmonic + noise));
       }
     }
-    return synthData;
+    this.lastFreqResult = this.synthData;
+    return this.synthData;
   }
 
   async requestMicrophonePermission() {
