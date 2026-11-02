@@ -553,11 +553,22 @@ class FridayApp {
       const span = document.createElement('span');
       span.textContent = d.text;
       span.style.cursor = 'pointer';
+      span.setAttribute('role', 'checkbox');
+      span.setAttribute('aria-checked', String(d.completed));
+      span.setAttribute('tabindex', '0');
       span.addEventListener('click', () => this.toggleDirective(d.id));
+      span.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.toggleDirective(d.id);
+        }
+      });
 
       const delBtn = document.createElement('button');
       delBtn.className = 'directive-del';
       delBtn.innerHTML = '&times;';
+      delBtn.setAttribute('aria-label', `Delete directive: ${d.text}`);
+      delBtn.title = `Delete directive: ${d.text}`;
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.deleteDirective(d.id);

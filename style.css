@@ -196,10 +196,13 @@ body.stark-theme {
   transition: all 0.2s ease;
 }
 
-.icon-btn:hover {
+.icon-btn:hover,
+.icon-btn:focus-visible {
   border-color: var(--cyan-primary);
   color: var(--cyan-primary);
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
 }
 
 .icon-btn.active {
@@ -802,9 +805,12 @@ body.stark-theme {
   flex-shrink: 0;
 }
 
-.mic-trigger-btn:hover {
+.mic-trigger-btn:hover,
+.mic-trigger-btn:focus-visible {
   background: rgba(0, 240, 255, 0.25);
   box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
 }
 
 .mic-trigger-btn.listening {
@@ -855,9 +861,12 @@ body.stark-theme {
   transition: all 0.2s ease;
 }
 
-.send-btn:hover {
+.send-btn:hover,
+.send-btn:focus-visible {
   background: linear-gradient(135deg, rgba(0, 240, 255, 0.4), rgba(0, 119, 255, 0.5));
   box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
 }
 
 /* Quick Voice Commands */
@@ -937,6 +946,14 @@ body.stark-theme {
   cursor: pointer;
   font-size: 1rem;
   font-weight: bold;
+}
+
+.directive-input-wrap button:focus-visible,
+.directive-del:focus-visible,
+.directive-item span:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
 }
 
 .directive-list {
